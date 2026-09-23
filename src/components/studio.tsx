@@ -1,18 +1,11 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Download,
-  Settings2,
-  X,
-  LockKeyhole,
-  Check,
-  RefreshCw,
-} from 'lucide-react';
+import { Check, Download, Factory, RefreshCw, Settings2, X } from 'lucide-react';
 import { useLoop } from './provider';
-import { Loading } from './shell';
-import { characters, phases, money } from '../lib/catalog';
+import { Loading, Pending } from './shell';
+import { characters, phases, sgd } from '../lib/catalog';
+import { percent, sellThrough } from '../domain/metrics';
+import { Button, Empty, ErrorNote, Stat } from './ui';
 import type { Analytics, Campaign } from '../lib/types';
 export function Studio() {
   const { data, login, act, busy } = useLoop(),
@@ -28,28 +21,41 @@ export function Studio() {
         if (!r.ok) throw new Error('Studio data is unavailable. Please retry.');
         return r.json();
       })
-      .then(setAnalytics)
+      .then((a) => {
+        setFetchError('');
+        setAnalytics(a);
+      })
       .catch((e) => setFetchError(e.message));
   }, [data, version]);
-  if (!data) return <Loading />;
+  if (!data) return <Pending />;
   if (data.user?.role !== 'BUSINESS')
     return (
-      <section className="page empty">
-        <p className="eyebrow">BEHIND THE CONSTELLATION</p>
-        <h1>The maker’s studio.</h1>
-        <p>See the demand. Make what matters.</p>
-        <button className="button primary" disabled={busy} onClick={() => login('business')}>
-          Enter demo studio <ArrowUpRight size={18} />
-        </button>
+      <section className="wrap page-pad">
+        <Empty
+          heading="h1"
+          title="The maker studio"
+          icon={<Factory size={26} />}
+          action={
+            <Button disabled={busy} onClick={() => login('business')}>
+              Enter demo studio
+            </Button>
+          }
+        >
+          See confirmed demand and decide what to make. The demo signs you in as Astral Studio.
+        </Empty>
       </section>
     );
   if (!analytics)
     return fetchError ? (
-      <section className="page empty">
-        <p role="alert">{fetchError}</p>
-        <button className="button primary" onClick={() => setVersion((v) => v + 1)}>
-          Retry studio data
-        </button>
+      <section className="wrap page-pad">
+        <ErrorNote
+          heading="h1"
+          title="Studio numbers didn’t load."
+          onRetry={() => setVersion((v) => v + 1)}
+          retryLabel="Retry studio data"
+        >
+          {fetchError}
+        </ErrorNote>
       </section>
     ) : (
       <Loading />
@@ -57,250 +63,203 @@ export function Studio() {
   const c = data.campaign,
     index = phases.indexOf(c.phase),
     locked = index >= 4,
-    next = phases[index + 1];
+    next = phases[index + 1],
+    peak = Math.max(1, ...analytics.distribution.map((d) => d.quantity));
   return (
-    <section className="page studio-page">
-      <div className="workspace-heading">
+    <section className="wrap studio">
+      <div className="page-heading">
         <div>
-          <p className="eyebrow">ASTRAL STUDIO / MAKER WORKSPACE</p>
-          <h1>
-            Demand, before making<span>.</span>
-          </h1>
-          <p>A clearer picture of what belongs in the world.</p>
+          <h1>Demand, before making.</h1>
+          <p className="lead">Astral Studio. Live numbers for {c.name}, updated on every order.</p>
         </div>
-        <div className="button-row">
+        <div className="row">
           <button
-            className="icon-button"
+            className="icon-btn"
             aria-label="Refresh analytics"
             onClick={() => setVersion((v) => v + 1)}
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={18} />
           </button>
-          <button
-            className="button secondary"
-            disabled={index > 1}
-            onClick={() => edit.current?.showModal()}
-          >
-            <Settings2 size={16} /> Edit campaign
-          </button>
+          <Button variant="ghost" disabled={index > 1} onClick={() => edit.current?.showModal()}>
+            <Settings2 size={18} aria-hidden="true" /> Edit campaign
+          </Button>
         </div>
       </div>
-      <div className="studio-campaign">
+      <div className="card studio-bar">
         <div>
-          <span className="eyebrow">SERIES 01 · {money(c.price)} SGD / BOX</span>
-          <h2>{c.name}</h2>
+          <p className="studio-bar-label">
+            Series 01, {sgd(c.price)} a box, cap {c.capacity}
+          </p>
+          <h2 className="h3">{c.name}</h2>
         </div>
-        <div className="studio-status">
-          <span className="status-tag">
-            <span className="live-dot" />
-            {c.phase.replaceAll('_', ' ')}
-          </span>
-          {next && (
-            <button className="text-link" onClick={() => advance.current?.showModal()}>
-              Advance campaign <ArrowRight size={15} />
-            </button>
-          )}
-        </div>
+        <span className="phase-chip">{phaseLabel(c.phase)}</span>
+        {next && (
+          <Button onClick={() => advance.current?.showModal()}>Advance campaign</Button>
+        )}
       </div>
-      <div className="studio-metrics">
-        {[
-          { n: analytics.orders, label: 'Confirmed orders', note: `of ${c.capacity} maximum` },
-          {
-            n: c.capacity - analytics.orders,
-            label: 'Unmanufactured capacity',
-            note: 'Not a claim of measured savings',
-          },
-          {
-            n: analytics.players,
-            label: 'Quest players',
-            note: `${analytics.completions} attempts finished`,
-          },
-          {
-            n: analytics.trades,
-            label: 'Exchanges completed',
-            note: `${analytics.trades * 2} digital allocations rehomed`,
-          },
-        ].map((m) => (
-          <div key={m.label}>
-            <span>{m.label}</span>
-            <strong>{String(m.n).padStart(2, '0')}</strong>
-            <small>{m.note}</small>
-          </div>
-        ))}
-      </div>
+      <dl className="stats">
+        <Stat label="Plays" value={analytics.plays} />
+        <Stat label="Wins" value={analytics.wins} />
+        <Stat label="Win rate" value={percent(analytics.winRate)} />
+        <Stat label="Confirmed orders" value={analytics.orders} />
+        <Stat label="Sell-through" value={percent(sellThrough(analytics.orders, c.capacity))} />
+        <Stat label="Trades" value={analytics.trades} />
+      </dl>
       <div className="studio-grid">
-        <section className="production-panel">
-          <div className="panel-heading">
+        <section className="card production" aria-labelledby="plan-heading">
+          <div className="production-head">
             <div>
-              <p className="eyebrow">
-                {locked ? 'FINAL MANUFACTURING PLAN' : 'LIVE ALLOCATION PLAN'}
+              <p className="studio-bar-label">
+                {locked ? 'Final manufacturing plan' : 'Live allocation plan'}
               </p>
-              <h2>{locked ? 'Ready to make.' : 'A constellation taking shape.'}</h2>
+              <h2 id="plan-heading" className="h3">
+                {locked ? 'Ready to make.' : 'What we would make today.'}
+              </h2>
             </div>
             <button
-              className="icon-button"
+              className="icon-btn"
               aria-label="Download production CSV"
               onClick={() => exportPlan(analytics, c, locked)}
             >
-              <Download size={17} />
+              <Download size={18} />
             </button>
           </div>
-          <div className="production-table-wrap">
-            <table className="production-table">
+          <div className="table-scroll">
+            <table className="data-table">
               <thead>
                 <tr>
-                  <th>Collectible</th>
-                  <th>Tier</th>
-                  <th>Confirmed demand</th>
-                  <th>Units</th>
+                  <th scope="col">Collectible</th>
+                  <th scope="col">Tier</th>
+                  <th scope="col">Demand</th>
+                  <th scope="col" className="num">
+                    Units
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {analytics.distribution.map((row) => (
-                  <tr key={row.id}>
-                    <th>
-                      <span
-                        className="table-dot"
-                        style={{ background: characters.find((ch) => ch.id === row.id)?.color }}
-                      />
-                      {row.name}
-                    </th>
-                    <td>
-                      <span className={'rarity ' + row.rarity.toLowerCase()}>{row.rarity}</span>
-                    </td>
-                    <td>
-                      <div className="demand-bar">
-                        <span
-                          style={{
-                            width:
-                              (row.quantity /
-                                Math.max(...analytics.distribution.map((d) => d.quantity))) *
-                                100 +
-                              '%',
-                            background: characters.find((ch) => ch.id === row.id)?.color,
-                          }}
-                        />
-                      </div>
-                    </td>
-                    <td>{row.quantity}</td>
-                  </tr>
-                ))}
+                {analytics.distribution.map((row) => {
+                  const color = characters.find((ch) => ch.id === row.id)?.color;
+                  return (
+                    <tr key={row.id}>
+                      <th scope="row">
+                        <span className="table-dot" style={{ background: color }} />
+                        {row.name}
+                      </th>
+                      <td>{tierLabel(row.rarity)}</td>
+                      <td>
+                        <div className="demand-bar">
+                          <span
+                            style={{ width: (row.quantity / peak) * 100 + '%', background: color }}
+                          />
+                        </div>
+                      </td>
+                      <td className="num">{row.quantity}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr>
-                  <th colSpan={3}>Total {locked ? 'to manufacture' : 'confirmed allocations'}</th>
-                  <td>{analytics.orders}</td>
+                  <th scope="row" colSpan={3}>
+                    Total {locked ? 'to manufacture' : 'confirmed'}
+                  </th>
+                  <td className="num">{analytics.orders}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
-          <p className="fine">
+          <p className="note">
             {locked
-              ? 'Allocations are locked. This is the final in-house manufacturing requirement.'
-              : 'Trading can still change who owns each kin. Quantities reflect paid allocations, never speculative stock.'}
+              ? 'Allocations are locked. This is the final quantity to make.'
+              : 'Trades can still change who owns each box, never how many exist.'}
           </p>
         </section>
-        <aside className="studio-side">
-          <section>
-            <p className="eyebrow">THE JOURNEY SO FAR</p>
-            <h3>Every step, accounted for.</h3>
-            <dl className="studio-funnel">
-              <div>
-                <dt>Quest players</dt>
-                <dd>{analytics.players}</dd>
-              </div>
-              <div>
-                <dt>Preorder access earned</dt>
-                <dd>{analytics.unlocks}</dd>
-              </div>
-              <div>
-                <dt>Confirmed orders</dt>
-                <dd>{analytics.orders}</dd>
-              </div>
-              <div>
-                <dt>Digital boxes opened</dt>
-                <dd>{analytics.opened}</dd>
-              </div>
-              <div>
-                <dt>Active trade listings</dt>
-                <dd>{analytics.listings}</dd>
-              </div>
-            </dl>
-            <p className="fine">
-              93 orders are seeded demo history. Quest engagement tracks sessions played in this
-              demo.
-            </p>
-          </section>
-          <section className="making-note">
-            <LockKeyhole size={22} />
-            <h3>{locked ? 'Made to final demand.' : 'Nothing made too soon.'}</h3>
-            <p>
-              Preorders close. Trades settle. Allocations lock. Only then do we manufacture
-              in-house.
-            </p>
-            <span>
-              {locked ? (
-                <>
-                  <Check size={14} /> Allocations locked
-                </>
-              ) : (
-                'No carbon-savings estimates. No invented impact.'
-              )}
-            </span>
-          </section>
+        <aside className="card funnel">
+          <h2 className="h3">The journey so far</h2>
+          <dl className="funnel-list">
+            <div>
+              <dt>Players</dt>
+              <dd>{analytics.players}</dd>
+            </div>
+            <div>
+              <dt>Games finished</dt>
+              <dd>{analytics.completions}</dd>
+            </div>
+            <div>
+              <dt>Slots earned</dt>
+              <dd>{analytics.unlocks}</dd>
+            </div>
+            <div>
+              <dt>Confirmed orders</dt>
+              <dd>{analytics.orders}</dd>
+            </div>
+            <div>
+              <dt>Boxes opened</dt>
+              <dd>{analytics.opened}</dd>
+            </div>
+            <div>
+              <dt>Offered for trade</dt>
+              <dd>{analytics.listings}</dd>
+            </div>
+          </dl>
+          <p className="note">
+            93 orders are seeded demo history. Unmade capacity ({c.capacity - analytics.orders}{' '}
+            boxes) is cap minus orders, not a measured saving.
+          </p>
         </aside>
       </div>
-      <div className="phase-timeline">
+      <ol className="timeline" aria-label="Campaign phases">
         {phases.slice(1).map((p, i) => (
-          <div key={p} className={i + 1 <= index ? 'passed' : ''}>
-            <span>{i + 1 < index ? <Check size={12} /> : String(i + 1).padStart(2, '0')}</span>
-            <p>{p.replaceAll('_', ' ').toLowerCase()}</p>
-          </div>
+          <li
+            key={p}
+            className={i + 1 < index ? 'passed' : i + 1 === index ? 'current' : ''}
+            aria-current={i + 1 === index ? 'step' : undefined}
+          >
+            <span>{i + 1 < index ? <Check size={14} aria-hidden="true" /> : i + 1}</span>
+            {phaseLabel(p)}
+          </li>
         ))}
-      </div>
+      </ol>
       <dialog ref={advance} className="dialog">
         <button
-          className="dialog-close icon-button"
+          className="dialog-close icon-btn"
           aria-label="Close phase dialog"
           onClick={() => advance.current?.close()}
         >
           <X size={18} />
         </button>
-        <p className="eyebrow">CAMPAIGN TRANSITION</p>
-        <h2>{next?.replaceAll('_', ' ').toLowerCase()}</h2>
+        <h2 className="h3">Move to: {next ? phaseLabel(next) : ''}</h2>
         <p>
           {next === 'ALLOCATION_LOCKED'
-            ? 'This will freeze all current ownership, expire pending matches, and close trading. These allocations become the final manufacturing plan.'
+            ? 'This freezes who owns every box, cancels pending trades and closes trading. The result becomes the final manufacturing plan.'
             : next === 'PREORDER_CLOSED'
-              ? 'This closes new preorders. Existing allocations can still be exchanged before the trade window ends.'
-              : 'Move the campaign to its next stage. Phase changes apply to every collector in this demo.'}
+              ? 'This stops new orders. Collectors can still trade until the trade window ends.'
+              : 'This moves the campaign to its next stage for every collector.'}
         </p>
-        <div className="button-row">
-          <button className="button secondary" onClick={() => advance.current?.close()}>
+        <div className="row">
+          <Button variant="ghost" onClick={() => advance.current?.close()}>
             Keep current phase
-          </button>
-          <button
-            className="button primary"
+          </Button>
+          <Button
             disabled={busy}
             onClick={async () => {
               const r = await act({ action: 'advance' });
               if (r) advance.current?.close();
             }}
           >
-            Confirm phase change <ArrowRight size={16} />
-          </button>
+            Confirm phase change
+          </Button>
         </div>
       </dialog>
       <dialog ref={edit} className="dialog edit-dialog">
         <button
-          className="dialog-close icon-button"
+          className="dialog-close icon-btn"
           aria-label="Close campaign editor"
           onClick={() => edit.current?.close()}
         >
           <X size={18} />
         </button>
-        <p className="eyebrow">SERIES 01 / CAMPAIGN SETTINGS</p>
-        <h2>Shape the drop.</h2>
+        <h2 className="h3">Campaign settings</h2>
         <CampaignForm
           key={JSON.stringify(c) + JSON.stringify(data.weights)}
           campaign={c}
@@ -311,6 +270,18 @@ export function Studio() {
     </section>
   );
 }
+const phaseNames: Record<string, string> = {
+  UPCOMING: 'Upcoming',
+  ACTIVE_PREORDER: 'Preorder open',
+  PREORDER_CLOSED: 'Preorder closed',
+  TRADE_WINDOW: 'Trade window',
+  ALLOCATION_LOCKED: 'Allocation locked',
+  IN_PRODUCTION: 'In production',
+  SHIPPING: 'Shipping',
+  COMPLETED: 'Completed',
+};
+export const phaseLabel = (phase: string) => phaseNames[phase] ?? phase;
+const tierLabel = (rarity: string) => rarity.charAt(0) + rarity.slice(1).toLowerCase();
 function CampaignForm({
   campaign: c,
   weights,
@@ -343,6 +314,8 @@ function CampaignForm({
             ends_at: new Date(String(f.get('ends'))).getTime(),
             trade_ends_at: new Date(String(f.get('tradeEnds'))).getTime(),
             weights: characters.map((ch) => Number(f.get(ch.id))),
+            required_score: Number(f.get('required_score')),
+            attempts_per_day: Number(f.get('attempts_per_day')),
           },
         });
         if (result) onSaved();
@@ -398,6 +371,30 @@ function CampaignForm({
           />
         </label>
       </div>
+      <div className="form-row">
+        <label>
+          Stars needed to win (1–15)
+          <input
+            name="required_score"
+            type="number"
+            required
+            min="1"
+            max="15"
+            defaultValue={c.required_score}
+          />
+        </label>
+        <label>
+          Tries per person per day (1–20)
+          <input
+            name="attempts_per_day"
+            type="number"
+            required
+            min="1"
+            max="20"
+            defaultValue={c.attempts_per_day}
+          />
+        </label>
+      </div>
       <label>
         Preorders start
         <input name="starts" type="datetime-local" required defaultValue={toLocal(c.starts_at)} />
@@ -417,8 +414,8 @@ function CampaignForm({
       </label>
       <fieldset>
         <legend>Allocation weights</legend>
-        <p className="fine">
-          Relative weights for non-demo allocation. The demo reveal remains deterministic.
+        <p className="note">
+          Relative weights, used only outside demo mode. The demo reveal is always Eclipse Knight.
         </p>
         <div className="weights-grid">
           {characters.map((ch, i) => (
@@ -437,9 +434,9 @@ function CampaignForm({
           ))}
         </div>
       </fieldset>
-      <button className="button primary wide" disabled={busy}>
-        Save campaign <Check size={16} />
-      </button>
+      <Button type="submit" wide disabled={busy}>
+        Save campaign
+      </Button>
     </form>
   );
 }

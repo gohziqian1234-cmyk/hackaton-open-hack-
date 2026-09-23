@@ -11,6 +11,9 @@ export interface Campaign {
   trade_ends_at: number;
   starts_at: number;
   confirmed: number;
+  required_score: number;
+  attempts_per_day: number;
+  game_mode: 'run' | 'lore';
 }
 export interface User {
   id: string;
@@ -54,9 +57,14 @@ export interface Snapshot {
   purchases: number;
   waitlisted: boolean;
   demo: boolean;
+  attemptLimit: number;
+  attemptsLeft: number;
 }
 export interface Analytics {
   orders: number;
+  plays: number;
+  wins: number;
+  winRate: number;
   players: number;
   completions: number;
   unlocks: number;

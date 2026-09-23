@@ -14,6 +14,7 @@ const messages: Record<string, string> = {
   INVALID_RUN: 'We couldn’t validate this run. Please play the full quest and try again.',
   ALLOCATION_UNAVAILABLE: 'This collectible is already reserved or locked.',
   TRY_AGAIN_SHORTLY: 'Take a short breather, then try again.',
+  ATTEMPT_LIMIT: 'You have used all your tries for today. Come back after midnight, Singapore time.',
   BUSINESS_ONLY: 'Open the demo studio account to use this control.',
   DEMO_DISABLED: 'Demo sign-in is disabled on this installation.',
 };

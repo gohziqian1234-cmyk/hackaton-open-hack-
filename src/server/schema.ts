@@ -1,7 +1,13 @@
-export const schema = `
+import type { DatabaseSync } from 'node:sqlite';
+
+export const pragmas = `
 PRAGMA foreign_keys=ON;
 PRAGMA journal_mode=WAL;
 PRAGMA busy_timeout=5000;
+`;
+
+/** v1 schema from the original hackathon build. Never edit; add a migration instead. */
+const v1 = `
 CREATE TABLE IF NOT EXISTS businesses(id TEXT PRIMARY KEY,name TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('COLLECTOR','BUSINESS')),created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS campaigns(id TEXT PRIMARY KEY,business_id TEXT REFERENCES businesses(id),name TEXT NOT NULL,description TEXT NOT NULL,price INTEGER NOT NULL CHECK(price>0),capacity INTEGER NOT NULL CHECK(capacity>0),max_per_user INTEGER NOT NULL CHECK(max_per_user>0),phase TEXT NOT NULL CHECK(phase IN ('UPCOMING','ACTIVE_PREORDER','PREORDER_CLOSED','TRADE_WINDOW','ALLOCATION_LOCKED','IN_PRODUCTION','SHIPPING','COMPLETED')),starts_at INTEGER NOT NULL,ends_at INTEGER NOT NULL,trade_ends_at INTEGER NOT NULL);
@@ -21,3 +27,60 @@ CREATE INDEX IF NOT EXISTS preferences_character ON preferences(character_id);
 CREATE INDEX IF NOT EXISTS matches_users ON matches(a_user,b_user,status);
 CREATE TRIGGER IF NOT EXISTS capacity_guard BEFORE INSERT ON orders BEGIN SELECT CASE WHEN (SELECT COUNT(*) FROM orders WHERE campaign_id=NEW.campaign_id)>=(SELECT capacity FROM campaigns WHERE id=NEW.campaign_id) THEN RAISE(ABORT,'SOLD_OUT') END; END;
 `;
+
+type Migration = { id: number; name: string; up: (db: DatabaseSync) => void };
+
+function hasColumn(db: DatabaseSync, table: string, column: string) {
+  return (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some(
+    (c) => c.name === column,
+  );
+}
+function addColumn(db: DatabaseSync, table: string, column: string, definition: string) {
+  if (!hasColumn(db, table, column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+/** Forward-only. Each migration runs once, in order, inside its own transaction. */
+export const migrations: Migration[] = [
+  { id: 1, name: 'v1 base schema', up: (db) => db.exec(v1) },
+  {
+    id: 2,
+    name: 'M3 game settings and attempt tracking',
+    up: (db) => {
+      addColumn(db, 'campaigns', 'required_score', 'INTEGER NOT NULL DEFAULT 10 CHECK(required_score BETWEEN 1 AND 15)');
+      addColumn(db, 'campaigns', 'attempts_per_day', 'INTEGER NOT NULL DEFAULT 5 CHECK(attempts_per_day BETWEEN 1 AND 20)');
+      addColumn(db, 'campaigns', 'game_mode', "TEXT NOT NULL DEFAULT 'run' CHECK(game_mode IN ('run','lore'))");
+      addColumn(db, 'game_sessions', 'won', 'INTEGER NOT NULL DEFAULT 0 CHECK(won IN (0,1))');
+      db.exec(`UPDATE game_sessions SET won=1 WHERE completed_at IS NOT NULL AND ((mode='run' AND score>=10) OR (mode='lore' AND score=3));
+        CREATE INDEX IF NOT EXISTS game_sessions_attempts ON game_sessions(user_id,campaign_id,started_at);`);
+    },
+  },
+];
+
+export function migrate(db: DatabaseSync) {
+  const version = () => (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+  if (version() >= migrations[migrations.length - 1].id) return;
+  // Table rebuilds need foreign keys off; they are re-checked before each commit.
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    for (const m of migrations) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        // Re-read inside the lock so two processes opening the same file never double-apply.
+        if (version() >= m.id) {
+          db.exec('COMMIT');
+          continue;
+        }
+        m.up(db);
+        if (db.prepare('PRAGMA foreign_key_check').all().length)
+          throw new Error(`Migration ${m.id} (${m.name}) left broken foreign keys`);
+        db.exec(`PRAGMA user_version=${m.id}`);
+        db.exec('COMMIT');
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+    }
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}

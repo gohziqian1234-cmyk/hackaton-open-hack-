@@ -2,11 +2,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { characters } from '../lib/catalog';
-import { schema } from './schema';
+import { migrate, pragmas } from './schema';
 export function createDatabase(path: string) {
   if (path !== ':memory:') mkdirSync(dirname(resolve(path)), { recursive: true });
   const db = new DatabaseSync(path);
-  db.exec(schema);
+  db.exec(pragmas);
+  migrate(db);
   seed(db);
   return db;
 }
@@ -15,8 +16,8 @@ export function seed(db: DatabaseSync) {
   const now = Date.now();
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.prepare('INSERT INTO businesses VALUES (?,?)').run('studio', 'Astral Studio');
-    const u = db.prepare('INSERT INTO users VALUES (?,?,?,?)');
+    db.prepare('INSERT INTO businesses (id,name) VALUES (?,?)').run('studio', 'Astral Studio');
+    const u = db.prepare('INSERT INTO users (id,name,role,created_at) VALUES (?,?,?,?)');
     u.run('collector', 'Alex', 'COLLECTOR', now);
     u.run('business', 'Astral Studio', 'BUSINESS', now);
     for (let i = 0; i < 16; i++)
@@ -26,7 +27,9 @@ export function seed(db: DatabaseSync) {
         'COLLECTOR',
         now,
       );
-    db.prepare('INSERT INTO campaigns VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(
+    db.prepare(
+      'INSERT INTO campaigns (id,business_id,name,description,price,capacity,max_per_user,phase,starts_at,ends_at,trade_ends_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+    ).run(
       'astral',
       'studio',
       'Astral Kin',
@@ -39,7 +42,9 @@ export function seed(db: DatabaseSync) {
       now + 7 * 86400000,
       now + 10 * 86400000,
     );
-    const c = db.prepare('INSERT INTO characters VALUES (?,?,?,?,?)');
+    const c = db.prepare(
+      'INSERT INTO characters (id,campaign_id,name,rarity,weight) VALUES (?,?,?,?,?)',
+    );
     characters.forEach((ch, i) =>
       c.run(ch.id, 'astral', ch.name, ch.rarity, [18, 17, 14, 16, 12, 11, 5][i]),
     );
@@ -63,7 +68,9 @@ export function seed(db: DatabaseSync) {
             : ch.id === 'aurora' && j === 0
               ? 'sarah-aurora'
               : 'allocation-' + id;
-        db.prepare('INSERT INTO allocations VALUES (?,?,?,?,?,?,?,?,?)').run(
+        db.prepare(
+          'INSERT INTO allocations (id,order_id,campaign_id,owner_id,original_owner_id,character_id,status,revealed,created_at) VALUES (?,?,?,?,?,?,?,?,?)',
+        ).run(
           allocation,
           id,
           'astral',
@@ -76,7 +83,7 @@ export function seed(db: DatabaseSync) {
         );
       }
     });
-    db.prepare('INSERT INTO preferences VALUES (?,?)').run('sarah-aurora', 'eclipse');
+    db.prepare('INSERT INTO preferences (allocation_id,character_id) VALUES (?,?)').run('sarah-aurora', 'eclipse');
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');

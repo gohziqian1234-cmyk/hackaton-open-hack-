@@ -3,6 +3,7 @@ const id = z.string().min(1).max(100);
 export const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('login'), user: z.enum(['collector', 'business', 'demo-0']) }),
   z.object({ action: z.literal('start'), mode: z.enum(['run', 'lore']) }),
+  z.object({ action: z.literal('demoWin') }),
   z.object({
     action: z.literal('complete'),
     sessionId: id,
@@ -27,6 +28,8 @@ export const actionSchema = z.discriminatedUnion('action', [
       ends_at: z.number().int().positive(),
       trade_ends_at: z.number().int().positive(),
       weights: z.array(z.number().positive().max(10000)).length(7),
+      required_score: z.number().int().min(1).max(15).optional(),
+      attempts_per_day: z.number().int().min(1).max(20).optional(),
     }),
   }),
 ]);

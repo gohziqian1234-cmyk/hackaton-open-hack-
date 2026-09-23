@@ -50,6 +50,8 @@ export async function POST(request: Request) {
     switch (data.action) {
       case 'start':
         return response(service.startGame(user.id, data.mode));
+      case 'demoWin':
+        return response(service.demoWin(user.id));
       case 'complete':
         return response(service.completeGame(user.id, data.sessionId, data.values));
       case 'preorder':

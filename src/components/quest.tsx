@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Pause, Play, Check, RotateCcw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Clock, Pause, Play, RotateCcw } from 'lucide-react';
 import { questConfig, lore } from '../lib/catalog';
 import { wave, waveDuration } from '../lib/game';
 import { useLoop } from './provider';
@@ -122,10 +122,31 @@ export default function Quest() {
         <p className="lead">
           Win to unlock one preorder slot. Free to play, no purchase needed.
         </p>
+        {data && (
+          <p className="tries" role="status">
+            {data.attemptsLeft > 0
+              ? `Free to play. You have ${data.attemptsLeft} ${data.attemptsLeft === 1 ? 'try' : 'tries'} left today.`
+              : 'You have used all your tries for today.'}
+          </p>
+        )}
       </div>
       <div className="quest-layout">
         <div className={'arena ' + (mode === 'lore' ? 'lore-arena' : '')}>
-          {result ? (
+          {!result && !session && data?.attemptsLeft === 0 ? (
+            <div className="quest-result">
+              <div className="result-symbol">
+                <Clock size={36} aria-hidden="true" />
+              </div>
+              <h2>That’s all for today.</h2>
+              <p>
+                Each collector gets {data.attemptLimit} free tries a day so bots can’t farm slots.
+                Your tries reset at midnight, Singapore time.
+              </p>
+              <Button href="/drop" variant="ghost">
+                Back to the drop
+              </Button>
+            </div>
+          ) : result ? (
             <div className="quest-result">
               <div className={result.won ? 'result-symbol won' : 'result-symbol'}>
                 {result.won ? <Check size={40} /> : <RotateCcw size={35} />}
@@ -319,6 +340,22 @@ export default function Quest() {
             Both challenges unlock the same slot. A slot lasts 15 minutes and does not hold a box
             until you pay.
           </p>
+          {data?.demo && !running && !result && (
+            <Button
+              variant="quiet"
+              disabled={busy}
+              onClick={async () => {
+                if (!data.user || data.user.role !== 'COLLECTOR') await login('collector');
+                const r = await act<Result>({ action: 'demoWin' });
+                if (r) {
+                  setSession(null);
+                  setResult(r);
+                }
+              }}
+            >
+              Demo: win instantly
+            </Button>
+          )}
         </aside>
       </div>
       {running && (

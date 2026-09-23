@@ -2,6 +2,8 @@ import { randomUUID, randomInt } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { lore, phases, questConfig } from '../lib/catalog';
 import { scoreRun } from '../lib/game';
+import { startOfSgtDay } from '../domain/time';
+import { winRate } from '../domain/metrics';
 import type { Allocation, Campaign, User, Snapshot, Match, Access, Analytics } from '../lib/types';
 
 export class DomainError extends Error {
@@ -95,9 +97,47 @@ export class Loopbox {
         ) ?? null)
       : null;
   }
+  /** Daily play limit per campaign. Demo mode allows 50 so rehearsals never lock anyone out. */
+  attemptLimit(c: Campaign) {
+    return this.demo ? 50 : c.attempts_per_day;
+  }
+  attemptsUsed(id: string, campaignId: string) {
+    return this.one<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM game_sessions WHERE user_id=? AND campaign_id=? AND started_at>=?',
+      id,
+      campaignId,
+      startOfSgtDay(this.now()),
+    )!.n;
+  }
+  private checkAttempts(id: string, c: Campaign) {
+    if (this.attemptsUsed(id, c.id) >= this.attemptLimit(c))
+      throw new DomainError('ATTEMPT_LIMIT', 429);
+  }
+  private grantAccess(id: string, campaignId: string, gameId: string) {
+    const existing = this.one<Access>(
+      "SELECT * FROM access WHERE user_id=? AND campaign_id=? AND status='AVAILABLE' AND expires_at>?",
+      id,
+      campaignId,
+      this.now(),
+    );
+    if (existing) return existing.id;
+    const accessId = randomUUID();
+    this.run(
+      'INSERT INTO access (id,user_id,campaign_id,game_id,earned_at,expires_at,status) VALUES (?,?,?,?,?,?,?)',
+      accessId,
+      id,
+      campaignId,
+      gameId,
+      this.now(),
+      this.now() + 15 * 60000,
+      'AVAILABLE',
+    );
+    return accessId;
+  }
   startGame(id: string, mode: 'run' | 'lore') {
     return this.transaction(() => {
-      this.eligible(id);
+      const c = this.eligible(id);
+      this.checkAttempts(id, c);
       const recent = this.one<{ n: number }>(
         'SELECT COUNT(*) AS n FROM game_sessions WHERE user_id=? AND started_at>?',
         id,
@@ -119,7 +159,7 @@ export class Loopbox {
   }
   completeGame(id: string, sessionId: string, values: number[]) {
     return this.transaction(() => {
-      this.eligible(id);
+      const c = this.eligible(id);
       const g = this.one<GameSession>(
         'SELECT * FROM game_sessions WHERE id=? AND user_id=?',
         sessionId,
@@ -140,32 +180,37 @@ export class Loopbox {
         g.mode === 'run'
           ? scoreRun(g.seed, values)
           : values.filter((v, i) => v === lore[i].answer).length;
-      const won = g.mode === 'run' ? score >= questConfig.requiredScore : score === lore.length;
+      const won = g.mode === 'run' ? score >= c.required_score : score === lore.length;
       this.run(
-        'UPDATE game_sessions SET completed_at=?,score=? WHERE id=?',
+        'UPDATE game_sessions SET completed_at=?,score=?,won=? WHERE id=?',
         this.now(),
         score,
+        won ? 1 : 0,
         g.id,
       );
       if (!won) return { won: false, score };
-      const existing = this.one<Access>(
-        "SELECT * FROM access WHERE user_id=? AND status='AVAILABLE' AND expires_at>?",
-        id,
-        this.now(),
-      );
-      if (existing) return { won: true, score, accessId: existing.id };
-      const accessId = randomUUID();
+      return { won: true, score, accessId: this.grantAccess(id, c.id, g.id) };
+    });
+  }
+  /** DEMO_MODE only: records a winning session exactly like a real win, without playing. */
+  demoWin(id: string) {
+    if (!this.demo) throw new DomainError('NOT_FOUND', 404);
+    return this.transaction(() => {
+      const c = this.eligible(id);
+      this.checkAttempts(id, c);
+      const gameId = randomUUID();
       this.run(
-        'INSERT INTO access VALUES (?,?,?,?,?,?,?)',
-        accessId,
+        'INSERT INTO game_sessions (id,user_id,campaign_id,mode,started_at,completed_at,score,seed,won) VALUES (?,?,?,?,?,?,?,?,1)',
+        gameId,
         id,
-        'astral',
-        g.id,
+        c.id,
+        'run',
         this.now(),
-        this.now() + 15 * 60000,
-        'AVAILABLE',
+        this.now(),
+        c.required_score,
+        randomInt(0, 10000),
       );
-      return { won: true, score, accessId };
+      return { won: true, score: c.required_score, accessId: this.grantAccess(id, c.id, gameId) };
     });
   }
   preorder(id: string, accessId: string) {
@@ -376,6 +421,8 @@ export class Loopbox {
       ends_at: number;
       trade_ends_at: number;
       weights: number[];
+      required_score?: number;
+      attempts_per_day?: number;
     },
   ) {
     this.business(id);
@@ -398,6 +445,13 @@ export class Loopbox {
         changes.trade_ends_at,
         c.id,
       );
+      if (changes.required_score !== undefined || changes.attempts_per_day !== undefined)
+        this.run(
+          'UPDATE campaigns SET required_score=?,attempts_per_day=? WHERE id=?',
+          changes.required_score ?? c.required_score,
+          changes.attempts_per_day ?? c.attempts_per_day,
+          c.id,
+        );
       this.all<{ id: string }>('SELECT id FROM characters ORDER BY rowid').forEach((ch, i) =>
         this.run('UPDATE characters SET weight=? WHERE id=?', changes.weights[i], ch.id),
       );
@@ -433,13 +487,21 @@ export class Loopbox {
         id,
       ),
       waitlisted: !!this.one('SELECT user_id FROM waitlist WHERE user_id=?', id),
+      attemptLimit: this.attemptLimit(c),
+      attemptsLeft: Math.max(0, this.attemptLimit(c) - this.attemptsUsed(id, c.id)),
     };
   }
   analytics(id: string): Analytics {
     this.business(id);
     const count = (sql: string) => this.one<{ n: number }>(sql)!.n;
+    const c = this.campaign();
+    const plays = count('SELECT COUNT(*) AS n FROM game_sessions'),
+      wins = count('SELECT COUNT(*) AS n FROM game_sessions WHERE won=1');
     return {
-      orders: this.campaign().confirmed,
+      orders: c.confirmed,
+      plays,
+      wins,
+      winRate: winRate(wins, plays),
       players: count('SELECT COUNT(DISTINCT user_id) AS n FROM game_sessions'),
       completions: count('SELECT COUNT(*) AS n FROM game_sessions WHERE completed_at IS NOT NULL'),
       unlocks: count('SELECT COUNT(*) AS n FROM access'),
