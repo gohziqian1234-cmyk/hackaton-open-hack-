@@ -310,6 +310,15 @@ CREATE INDEX IF NOT EXISTS themes_order ON themes(sort_order);`);
       db.exec("UPDATE characters SET slug=id WHERE campaign_id='astral' AND slug IS NULL");
     },
   },
+  {
+    id: 10,
+    name: 'v2 notify-me list for coming-soon themes',
+    up: (db) => {
+      db.exec(`
+CREATE TABLE IF NOT EXISTS theme_interest(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),theme_id TEXT NOT NULL REFERENCES themes(id),created_at INTEGER NOT NULL,UNIQUE(user_id,theme_id));
+CREATE INDEX IF NOT EXISTS theme_interest_theme ON theme_interest(theme_id);`);
+    },
+  },
 ];
 
 export function migrate(db: DatabaseSync) {

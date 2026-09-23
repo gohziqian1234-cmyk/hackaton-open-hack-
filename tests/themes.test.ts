@@ -115,3 +115,39 @@ describe('v2 theme seed', () => {
     db.exec('ROLLBACK');
   });
 });
+
+describe('drops browser data and notify me', () => {
+  it('lists 7 theme cards with live counts and joins notify-me once per user', async () => {
+    const { App } = await import('../src/server/app');
+    const s = new App(createDatabase(':memory:'), () => Date.now(), true);
+    const themes = s.themes();
+    expect(themes.map((t) => t.status)).toEqual([
+      'live',
+      'live',
+      'live',
+      'coming_soon',
+      'coming_soon',
+      'coming_soon',
+      'coming_soon',
+    ]);
+    const naruto = themes.find((t) => t.slug === 'naruto')!;
+    expect(naruto).toMatchObject({
+      licensed: true,
+      payment_mode: 'demo',
+      price: 1990,
+      capacity: 100,
+      claimed: 0,
+      mix: { COMMON: 2, RARE: 1, SECRET: 1 },
+    });
+    expect(themes.find((t) => t.slug === 'astral-kin')).toMatchObject({
+      licensed: false,
+      payment_mode: 'stripe',
+      claimed: 93,
+    });
+    s.notifyTheme('collector', 'sanrio');
+    s.notifyTheme('collector', 'sanrio');
+    expect(s.interest('collector')).toEqual(['sanrio']);
+    expect(() => s.notifyTheme('collector', 'naruto')).toThrow('INVALID_STATE');
+    expect(() => s.notifyTheme('collector', 'pokemon')).toThrow('NOT_FOUND');
+  });
+});

@@ -1,5 +1,7 @@
 // v2 Drops: theme browser data on top of the campaign engine (service → partners → market).
+import { randomUUID } from 'node:crypto';
 import type { User, ThemeInfo, Snapshot } from '../lib/types';
+import { DomainError } from './errors';
 import { Market } from './market';
 
 type ThemeRow = {
@@ -122,8 +124,34 @@ export class Drops extends Market {
       null
     );
   }
+  /** "Notify me" on a coming-soon theme. Idempotent per user and theme. */
+  notifyTheme(userId: string, slug: string) {
+    this.user(userId);
+    const t = this.one<{ id: string; status: string }>('SELECT id,status FROM themes WHERE slug=?', slug);
+    if (!t) throw new DomainError('NOT_FOUND', 404);
+    if (t.status !== 'coming_soon') throw new DomainError('INVALID_STATE');
+    this.run(
+      'INSERT OR IGNORE INTO theme_interest (id,user_id,theme_id,created_at) VALUES (?,?,?,?)',
+      randomUUID(),
+      userId,
+      t.id,
+      this.now(),
+    );
+    return { ok: true };
+  }
+  interest(userId: string) {
+    return this.all<{ slug: string }>(
+      'SELECT t.slug FROM theme_interest i JOIN themes t ON t.id=i.theme_id WHERE i.user_id=? ORDER BY t.sort_order',
+      userId,
+    ).map((r) => r.slug);
+  }
   snapshot(user: User | null, campaignId = 'astral'): Snapshot {
     const core = super.snapshot(user, campaignId);
-    return { ...core, themes: this.themes(), interest: [], items: [] };
+    return {
+      ...core,
+      themes: this.themes(),
+      interest: user ? this.interest(user.id) : [],
+      items: [],
+    };
   }
 }

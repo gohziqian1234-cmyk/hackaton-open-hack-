@@ -154,6 +154,7 @@ export const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('saveDraftCampaign'), campaign: campaignSchema }),
   z.object({ action: z.literal('submitCampaign'), campaignId: slug }),
   z.object({ action: z.literal('waitlist'), campaignId: slug.optional() }),
+  z.object({ action: z.literal('notifyTheme'), slug }),
   z.discriminatedUnion('channel', [
     z.object({ action: z.literal('sendOtp'), channel: z.literal('EMAIL'), target: email }),
     z.object({ action: z.literal('sendOtp'), channel: z.literal('PHONE'), target: phone }),

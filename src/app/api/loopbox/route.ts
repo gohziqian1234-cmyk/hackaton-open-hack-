@@ -114,6 +114,8 @@ export async function POST(request: Request) {
         return response(service.edit(user.id, data.changes));
       case 'waitlist':
         return response(service.waitlist(user.id, data.campaignId));
+      case 'notifyTheme':
+        return response(service.notifyTheme(user.id, data.slug));
       case 'sendOtp':
         return response(service.sendOtp(user.id, data.channel, data.target));
       case 'verifyOtp':
