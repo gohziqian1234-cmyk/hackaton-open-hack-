@@ -4,11 +4,7 @@ import { Component, useEffect, useState } from 'react';
 import { BoxArt, KinArt } from './art';
 const Scene = dynamic(() => import('./scene'), {
   ssr: false,
-  loading: () => (
-    <div className="scene-loading">
-      <span className="orbit-loader" />
-    </div>
-  ),
+  loading: () => <div className="scene-loading skeleton" aria-hidden="true" />,
 });
 class Boundary extends Component<
   { children: React.ReactNode; fallback: React.ReactNode },
@@ -56,18 +52,21 @@ export function Stage({
       media.removeEventListener('change', update);
     };
   }, []);
-  const fallback = (
-    <div className="fallback-art">
-      {mode === 'hero' || opened ? <KinArt id={character} /> : <BoxArt />}
-      <small>Still view · the same collectible</small>
-    </div>
-  );
+  const fallback =
+    mode === 'hero' ? (
+      <div className="fallback-art hero-fallback">
+        <BoxArt className="fallback-box" />
+        <KinArt id={character} className="fallback-kin" />
+      </div>
+    ) : (
+      <div className="fallback-art">
+        {opened ? <KinArt id={character} /> : <BoxArt />}
+      </div>
+    );
   return (
     <div className={'product-stage ' + mode} aria-label="Interactive 3D Astral Kin collectible">
       {supported === null ? (
-        <div className="scene-loading">
-          <span className="orbit-loader" />
-        </div>
+        <div className="scene-loading skeleton" aria-hidden="true" />
       ) : supported ? (
         <Boundary fallback={fallback}>
           <Scene

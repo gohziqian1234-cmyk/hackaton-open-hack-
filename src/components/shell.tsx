@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Box, LayoutGrid, Menu, Repeat2, Store, UserRound, X } from 'lucide-react';
 import { useState } from 'react';
 import { Provider, useLoop } from './provider';
-import { Skeleton } from './ui';
+import { ErrorNote, Skeleton } from './ui';
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <Provider>
@@ -121,4 +121,17 @@ export function Loading() {
       <Skeleton height={280} />
     </section>
   );
+}
+/** Loading skeleton, or an error with a retry when the first snapshot failed. */
+export function Pending() {
+  const { loadFailed, retry } = useLoop();
+  if (loadFailed)
+    return (
+      <section className="wrap page-pad">
+        <ErrorNote heading="h1" title="We couldn’t load the drop." onRetry={retry}>
+          Check your connection, then try again. Nothing you bought has been lost.
+        </ErrorNote>
+      </section>
+    );
+  return <Loading />;
 }

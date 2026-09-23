@@ -1,314 +1,168 @@
 'use client';
-import Link from 'next/link';
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Sparkles,
-  Gamepad2,
-  Repeat2,
-  PackageCheck,
-  Check,
-  LockKeyhole,
-} from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { Stage } from './stage';
 import { KinArt } from './art';
 import { useLoop } from './provider';
-import { characters, money } from '../lib/catalog';
-import { Loading } from './shell';
-import { useRouter } from 'next/navigation';
+import { characters, sgd } from '../lib/catalog';
+import { Pending } from './shell';
+import { Button, Perforation, Stat, Tier } from './ui';
+
+const steps = [
+  { title: 'Play', copy: 'Beat the fragment run or the lore challenge. Playing is free.' },
+  { title: 'Pay', copy: 'Your slot is held for 15 minutes. Pay the full box price.' },
+  { title: 'Open', copy: 'Your box is drawn from a shuffle we published before the drop.' },
+  { title: 'Trade', copy: 'Swap a duplicate for another kin of the same rarity.' },
+  { title: 'We make it', copy: 'Only confirmed boxes go to production, then we ship.' },
+];
+
 export function Discovery() {
   const { data } = useLoop();
   const claimed = data?.campaign.confirmed ?? 93,
-    cap = data?.campaign.capacity ?? 100;
+    cap = data?.campaign.capacity ?? 100,
+    remaining = Math.max(0, cap - claimed);
   return (
-    <>
-      <section className="home-hero">
+    <div className="wrap">
+      <section className="hero">
         <div className="hero-copy">
-          <div className="eyebrow">
-            <span className="live-dot" /> SMALL BATCHES. BIG POSSIBILITIES.
-          </div>
+          <span className="live">Astral Kin drop is live</span>
           <h1>
-            A little mystery.
-            <br />A better way
-            <br />
-            to <em>collect.</em>
+            <span>A little mystery,</span> <span>made to order.</span>
           </h1>
           <p>
-            Play for your place. Meet your next favourite.
-            <br className="desktop-break" /> We only make what finds a home.
+            Win a slot in a short game, pay for one blind box, and open it right away. We only make
+            the boxes people actually bought.
           </p>
-          <div className="hero-actions">
-            <Link className="button primary" href="/drop">
-              Explore the drop <ArrowUpRight size={19} />
-            </Link>
-            <a className="text-link" href="#how-it-works">
-              A different kind of collectible <ArrowRight size={16} />
-            </a>
-          </div>
-          <div className="edition-note">
-            <span className="mini-orbit">✳</span>
-            <div>
-              Thoughtfully limited.
-              <br />
-              <strong>Never made for a shelf somewhere.</strong>
-            </div>
+          <div className="hero-cta">
+            <Button href="/drop">Explore the drop</Button>
+            {/* The fairness page arrives in M4. */}
+            <Button href="/verify/astral" variant="quiet">
+              How the draw stays fair
+            </Button>
           </div>
         </div>
-        <div className="hero-gallery">
-          <div className="gallery-top">
-            <span>LOOPBOX ORIGINALS</span>
-            <span>COLLECTION NO. 001</span>
-          </div>
-          <div className="orbital-lines">
-            <i />
-            <i />
-          </div>
-          <div className="big-astral" aria-hidden="true">
-            ASTRAL
-          </div>
+        <div className="boxstage">
           <Stage />
-          <div className="object-caption">
-            <span className="crosshair">+</span>
-            <span>
-              THE FIRST CONSTELLATION
+          <div className="stamp" role="img" aria-label={`${claimed} of ${cap} boxes claimed`}>
+            {claimed}
+            <small>
+              of {cap}
               <br />
-              <strong>Seven souls. One universe.</strong>
-            </span>
-          </div>
-          <div className="gallery-bottom">
-            <div>
-              <span className="eyebrow">FRAGMENTS BEYOND THE STARS</span>
-              <h2>
-                Astral Kin<span>™</span>
-              </h2>
-            </div>
-            <span className="edition-pill">
-              100
-              <br />
-              <small>ONLY</small>
-            </span>
+              claimed
+            </small>
           </div>
         </div>
       </section>
-      <section className="drop-strip">
-        <div>
-          <span className="live-dot" />
-          <strong>THE FIRST DROP IS LIVE</strong>
-          <span className="strip-muted">One box. A world of possibility.</span>
+      <div className="meter">
+        <span className="live">{remaining} remaining</span>
+        <div className="bar" role="img" aria-label={`${claimed} of ${cap} claimed`}>
+          <i style={{ width: Math.min(100, (claimed / cap) * 100) + '%' }} />
         </div>
-        <div className="strip-cap">
-          <span>
-            <strong>{claimed}</strong> / {cap} claimed
-          </span>
-          <div className="progress">
-            <i style={{ width: Math.min(100, (claimed / cap) * 100) + '%' }} />
-          </div>
-        </div>
-        <Link href="/drop">
-          Find your Astral Kin <ArrowUpRight size={18} />
-        </Link>
-      </section>
-      <section className="approach" id="how-it-works">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">A SMALL SHIFT. A BETTER CYCLE.</p>
-            <h2>
-              The joy of the unknown.
-              <br />
-              <span>Without the unnecessary.</span>
-            </h2>
-          </div>
-          <p>
-            The surprise stays. The excess doesn’t.
-            <br />
-            Your journey shapes what we make.
-          </p>
-        </div>
-        <div className="steps">
-          {[
-            {
-              icon: Gamepad2,
-              title: 'Play your way in.',
-              copy: 'A short quest. A little skill. Earn access to one limited blind-box preorder.',
-            },
-            {
-              icon: Sparkles,
-              title: 'Meet your mystery.',
-              copy: 'Open your box digitally and discover your Astral Kin before it’s made.',
-            },
-            {
-              icon: Repeat2,
-              title: 'Find your favourite.',
-              copy: 'Keep your kin or exchange with a collector in the same rarity tier.',
-            },
-            {
-              icon: PackageCheck,
-              title: 'Then, we make.',
-              copy: 'When allocations are final, we manufacture only confirmed orders in-house.',
-            },
-          ].map((s, i) => (
-            <article key={s.title}>
-              <div className="step-top">
-                <s.icon size={25} strokeWidth={1.3} />
-                <span>0{i + 1}</span>
-              </div>
-              <h3>{s.title}</h3>
-              <p>{s.copy}</p>
-            </article>
+        <strong>
+          {claimed}/{cap}
+        </strong>
+      </div>
+      <section className="how" aria-labelledby="how-heading">
+        <h2 id="how-heading">How a drop works</h2>
+        <ol className="steps">
+          {steps.map((step) => (
+            <li className="step" key={step.title}>
+              <h3>{step.title}</h3>
+              <p>{step.copy}</p>
+            </li>
           ))}
-        </div>
+        </ol>
       </section>
-      <section className="manifesto">
-        <span className="eyebrow">MADE WITH INTENTION</span>
-        <h2>
-          A collection of things you love.
-          <br />
-          Not a warehouse of things you might.
-        </h2>
-        <Link className="text-link" href="/drop">
-          Be part of the first constellation <ArrowRight size={18} />
-        </Link>
-      </section>
-    </>
+    </div>
   );
 }
+
 export function Drop() {
   const { data, login, busy, act } = useLoop(),
     router = useRouter();
-  if (!data) return <Loading />;
+  if (!data) return <Pending />;
   const c = data.campaign,
-    remaining = c.capacity - c.confirmed,
+    remaining = Math.max(0, c.capacity - c.confirmed),
     closed = c.phase !== 'ACTIVE_PREORDER' || data.serverTime >= c.ends_at,
-    limit = data.purchases >= c.max_per_user;
+    limit = data.purchases >= c.max_per_user,
+    days = Math.max(0, Math.ceil((c.ends_at - data.serverTime) / 86400000));
   const enter = async () => {
     if (!data.user || data.user.role !== 'COLLECTOR') await login('collector');
     router.push(data.access.length ? '/checkout' : '/quest');
   };
   return (
-    <section className="page drop-page">
-      <div className="breadcrumb">
-        <Link href="/">Discover</Link>
-        <span>/</span>Astral Kin · Series 01
-      </div>
-      <div className="drop-grid">
-        <div className="drop-display">
-          <div className="gallery-top">
-            <span>ORIGINAL DESIGN · SERIES 01</span>
-            <span>01 / 07</span>
-          </div>
-          <Stage />
-          <div className="display-label">
-            <span>ARTIST’S PREVIEW</span>
-            <p>
-              Your character is a surprise.
-              <br />
-              Every box belongs to this constellation.
-            </p>
-          </div>
-        </div>
-        <div className="drop-info">
-          <p className="eyebrow">
-            <span className="live-dot" />
-            {closed
-              ? 'PREORDER ' + c.phase.replaceAll('_', ' ')
-              : remaining > 0
-                ? 'LIMITED PREORDER · LIVE NOW'
-                : 'THIS CONSTELLATION IS FULL'}
-          </p>
-          <h1>
-            {c.name}
-            <sup>™</sup>
-          </h1>
-          <p className="subtitle">Fragments beyond the stars.</p>
-          <p className="description">{c.description}</p>
-          <div className="price">
-            <strong>{money(c.price)}</strong>
-            <span>SGD / one mystery blind box</span>
-          </div>
-          <div className="capacity">
-            <div>
-              <strong>
-                {c.confirmed} <span>/ {c.capacity} claimed</span>
-              </strong>
-              <span>{Math.max(0, remaining)} remaining</span>
-            </div>
-            <div className="progress">
-              <i style={{ width: (c.confirmed / c.capacity) * 100 + '%' }} />
-            </div>
-            <small>
-              {closed
-                ? 'Preorders closed'
-                : `Closes ${new Date(c.ends_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })}`}{' '}
-              · Up to {c.max_per_user} per collector · {data.purchases} owned purchases
-            </small>
-          </div>
-          {remaining <= 0 ? (
-            <button
-              className="button primary wide"
-              disabled={busy || data.waitlisted}
-              onClick={async () => {
-                if (!data.user) await login('collector');
-                await act({ action: 'waitlist' });
-              }}
-            >
-              {data.waitlisted ? 'You’re on the waitlist' : 'Sold out · Join waitlist'}{' '}
-              <Check size={18} />
-            </button>
-          ) : (
-            <button
-              className="button primary wide"
-              disabled={busy || closed || limit}
-              onClick={enter}
-            >
-              {limit
-                ? 'Your collection is complete'
-                : closed
-                  ? 'Preorders closed'
-                  : data.access.length
-                    ? 'Claim preorder slot'
-                    : 'Play to unlock'}
-              {!closed && !limit && <ArrowUpRight size={20} />}
-            </button>
-          )}
-          <p className="fine centered">
-            No pay-to-play. No guaranteed character. Just a little discovery.
-          </p>
-          <div className="drop-benefits">
-            <span>
-              <LockKeyhole size={16} /> Earn your access
-            </span>
-            <span>
-              <Repeat2 size={16} /> Trade before production
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="section-heading lineup-heading">
-        <div>
-          <p className="eyebrow">MEET THE CONSTELLATION</p>
-          <h2>Seven kin. Who will find you?</h2>
-        </div>
-        <p>
-          4 common · 2 rare · 1 secret
-          <br />
-          Equal-tier exchanges. No rerolls.
+    <section className="wrap drop">
+      <div className="drop-main">
+        <span className={closed ? 'live closed' : 'live'}>
+          {remaining > 0 ? `${remaining} remaining` : 'Sold out'}
+        </span>
+        <h1>
+          {c.name}
+          <span className="tm">™</span>
+        </h1>
+        <p className="lead">{c.description}</p>
+        <h2 className="h3 lineup-title">The lineup. One box holds one kin, and you can’t pick which.</h2>
+        <ul className="lineup">
+          {characters.map((ch) => {
+            const secret = ch.rarity === 'SECRET';
+            return (
+              <li
+                key={ch.id}
+                className={'kin ' + ch.rarity.toLowerCase()}
+                style={{ '--kin-color': ch.color } as React.CSSProperties}
+              >
+                <KinArt id={ch.id} silhouette={secret} />
+                <h3>{secret ? 'Secret kin' : ch.name}</h3>
+                <Tier rarity={ch.rarity} />
+                <span className="odds">
+                  {ch.units} of {c.capacity} boxes
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="note drop-disclosure">
+          Demo note: the new box in this walkthrough is Eclipse Knight every time, so the trade
+          demo is repeatable. No real money is taken.
         </p>
       </div>
-      <div className="lineup">
-        {characters.map((ch, i) => (
-          <article key={ch.id} style={{ '--kin-color': ch.color } as React.CSSProperties}>
-            <span className="kin-number">0{i + 1}</span>
-            <KinArt id={ch.id} />
-            <span className={'rarity ' + ch.rarity.toLowerCase()}>{ch.rarity}</span>
-            <h3>{ch.name}</h3>
-            <p>{ch.description}</p>
-          </article>
-        ))}
-      </div>
-      <p className="fine">
-        Demo disclosure: your first new box reveals Eclipse Knight to make the trading walkthrough
-        repeatable. Real-money purchases are not available.
-      </p>
+      <aside className="panel buy" aria-label="Buy a box">
+        <Tier rarity="RARE">{closed ? 'Preorder closed' : 'Preorder open'}</Tier>
+        <div className="price">{sgd(c.price)}</div>
+        <p>One sealed blind box, made after the preorder closes.</p>
+        <dl className="facts">
+          <Stat label="Left" value={`${remaining} of ${c.capacity}`} />
+          <Stat label="Per person" value={`${c.max_per_user} max`} />
+          <Stat label="Slot hold" value="15 min" />
+          <Stat label="Closes" value={closed ? 'Closed' : days === 1 ? '1 day' : `${days} days`} />
+        </dl>
+        <Perforation />
+        {remaining <= 0 ? (
+          <Button
+            wide
+            disabled={busy || data.waitlisted}
+            onClick={async () => {
+              if (!data.user) await login('collector');
+              await act({ action: 'waitlist' });
+            }}
+          >
+            {data.waitlisted ? 'You’re on the waitlist' : 'Sold out · Join waitlist'}
+          </Button>
+        ) : (
+          <Button wide disabled={busy || closed || limit} onClick={enter}>
+            {limit
+              ? 'Your collection is complete'
+              : closed
+                ? 'Preorders closed'
+                : data.access.length
+                  ? 'Claim preorder slot'
+                  : 'Play to unlock'}
+          </Button>
+        )}
+        <p className="odds-note">
+          Free to play. No purchase needed to try the game. Odds are shown on every character.
+          {data.purchases > 0 && ` You have bought ${data.purchases} of ${c.max_per_user}.`}
+        </p>
+      </aside>
     </section>
   );
 }

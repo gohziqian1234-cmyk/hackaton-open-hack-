@@ -1,10 +1,10 @@
 # PROJECT_STATE
 
 GOAL: Win NYP Open Hack with a redesigned, live golden path (play → Stripe test pay → reveal → same-rarity swap → verify fairness) plus thin B2B and C2C, built entirely by prompting in 48 h.
-DONE: M1 design system and shell — Unbounded + Figtree fonts, Night Counter tokens (legacy variables re-pointed), no text below 13px, no caps eyebrows in CSS, ui/ primitives (Button, Tier, Stat, Card, Empty, ErrorNote, Skeleton, Perforation), new shell (logo, pill nav with aria-current, account chip, mobile menu, bottom tab bar), skeleton loading, recoloured characters, /market and /partners stubs, /me account hub, /terms draft, app icon. M0 baseline and safety net — baseline-v1 tag, all checks green before changes (typecheck, lint, 23 unit, build, 5 e2e); .env.example lists Stripe/demo variables; `npm run reset:demo`; `GET /api/health`; `npm start` binds to HOSTNAME (default 127.0.0.1); README "Deploy (single host)"; Playwright can use a local Chromium via PW_CHROMIUM_PATH.
+DONE: M2 collector screens — home (Frame 1: live badge, box stage + claimed stamp, meter, 5-step how-it-works), drop (Frame 2: lineup with tier and N of 100 boxes, Secret kin silhouette, sticky price panel), quest (dark arena, Unbounded HUD), checkout (price ticket, simulated-payment note), reveal (≤2.4 s shake → split → foil burst → name; revisit/reduced motion = final frame), collection, trades (Frame 4 facing cards + swap disc); loading/empty/error states via Pending, Empty, ErrorNote. M1 design system and shell — Unbounded + Figtree fonts, Night Counter tokens (legacy variables re-pointed), no text below 13px, no caps eyebrows in CSS, ui/ primitives (Button, Tier, Stat, Card, Empty, ErrorNote, Skeleton, Perforation), new shell (logo, pill nav with aria-current, account chip, mobile menu, bottom tab bar), skeleton loading, recoloured characters, /market and /partners stubs, /me account hub, /terms draft, app icon. M0 baseline and safety net — baseline-v1 tag, all checks green before changes (typecheck, lint, 23 unit, build, 5 e2e); .env.example lists Stripe/demo variables; `npm run reset:demo`; `GET /api/health`; `npm start` binds to HOSTNAME (default 127.0.0.1); README "Deploy (single host)"; Playwright can use a local Chromium via PW_CHROMIUM_PATH.
 IN PROGRESS: nothing
 BLOCKED: nothing
-BUGS: none recorded yet
+BUGS: none recorded yet. Known stub: home link "How the draw stays fair" 404s until M4 adds /verify/astral.
 DECISIONS: keep SQLite + single host (no Supabase/Vercel); in-app payment only for C2C; fixed disclosed demo seed; CAPTCHA moved to P2; Codex used as read-only reviewer. Playwright keeps `channel: 'chrome'` by default; PW_CHROMIUM_PATH overrides it for machines without Chrome.
-NEXT 3 ACTIONS: 1) run M2 collector screens  2) run M3 studio + attempts  3) run M4 fairness
-LAST GREEN TAG: m1-green
+NEXT 3 ACTIONS: 1) run M3 studio + attempts  2) run M4 fairness  3) run M5 Stripe
+LAST GREEN TAG: m2-green

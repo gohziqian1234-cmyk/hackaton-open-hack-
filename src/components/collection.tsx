@@ -1,143 +1,114 @@
 'use client';
-import Link from 'next/link';
-import { ArrowUpRight, Download, LockKeyhole, Repeat2, Package, Check } from 'lucide-react';
+import { Download, LockKeyhole, Package } from 'lucide-react';
 import { useLoop } from './provider';
 import { KinArt, BoxArt } from './art';
 import { characters, phases } from '../lib/catalog';
-import { Loading } from './shell';
+import { Pending } from './shell';
 import { downloadCard } from './purchase';
+import { Button, Empty, Tier } from './ui';
 export function CollectorGate() {
   const { login, busy } = useLoop();
   return (
-    <section className="page empty">
-      <p className="eyebrow">YOUR NEXT CHAPTER</p>
-      <h1>
-        A constellation
-        <br />
-        of your own.
-      </h1>
-      <p>Enter as Alex, our demo collector. Your progress stays saved.</p>
-      <button className="button primary" disabled={busy} onClick={() => login('collector')}>
-        Enter demo collection <ArrowUpRight size={18} />
-      </button>
+    <section className="wrap page-pad">
+      <Empty
+        heading="h1"
+        title="Sign in to see your boxes."
+        icon={<Package size={26} />}
+        action={
+          <Button disabled={busy} onClick={() => login('collector')}>
+            Enter demo collection
+          </Button>
+        }
+      >
+        This demo signs you in as Alex, a collector with one box already. Your progress is saved.
+      </Empty>
     </section>
   );
 }
+const statusText: Record<string, string> = {
+  OWNED: 'Yours. Not made yet.',
+  TRADE_LISTED: 'Looking for a trade.',
+  TRADE_PENDING: 'Trade match waiting for both collectors.',
+  LOCKED_FOR_PRODUCTION: 'Final. Going to production.',
+};
 export function Collection() {
   const { data } = useLoop();
-  if (!data) return <Loading />;
+  if (!data) return <Pending />;
   if (data.user?.role !== 'COLLECTOR') return <CollectorGate />;
   const locked = phases.indexOf(data.campaign.phase) >= 4;
   return (
-    <section className="page collection-page">
-      <div className="workspace-heading">
+    <section className="wrap collection">
+      <div className="page-heading">
         <div>
-          <p className="eyebrow">THE THINGS THAT FIND YOU</p>
-          <h1>
-            My constellation<span>.</span>
-          </h1>
-          <p>Your digital collection. Soon, something you can hold.</p>
-        </div>
-        <Link className="button secondary" href="/drop">
-          Explore the drop <ArrowUpRight size={18} />
-        </Link>
-      </div>
-      <div className="collection-meta">
-        <span>{String(data.collection.length).padStart(2, '0')} KIN COLLECTED</span>
-        <span>ASTRAL KIN / SERIES 01</span>
-        <span>
-          <span className="live-dot" />
-          {locked ? 'ALLOCATIONS FINAL' : 'PRE-PRODUCTION'}
-        </span>
-      </div>
-      {data.collection.length === 0 ? (
-        <div className="empty">
-          <Package size={40} />
-          <h2>Your first kin is waiting.</h2>
-          <Link className="button primary" href="/quest">
-            Play to unlock
-          </Link>
-        </div>
-      ) : (
-        <div className="collection-grid">
-          {data.collection.map((a, i) => {
-            const ch = characters.find((c) => c.id === a.character_id);
-            const duplicate =
-              a.revealed &&
-              data.collection.filter((other) => other.character_id === a.character_id).length > 1;
-            return (
-              <article key={a.id} className="collection-card">
-                <div className="collection-art">
-                  <span className="card-number">KIN / {String(i + 1).padStart(3, '0')}</span>
-                  {duplicate && <span className="duplicate-label">DUPLICATE</span>}
-                  {a.revealed ? <KinArt id={a.character_id} /> : <BoxArt />}
-                  <span className="art-edition">THE FIRST CONSTELLATION</span>
-                </div>
-                <div className="collection-card-body">
-                  <span className={'rarity ' + ch?.rarity.toLowerCase()}>
-                    {ch?.rarity || 'UNOPENED'}
-                  </span>
-                  <h2>{ch?.name || 'A mystery, waiting.'}</h2>
-                  <p>
-                    {a.revealed
-                      ? ch?.description
-                      : 'Your kin has been allocated. Meet them whenever you’re ready.'}
-                  </p>
-                  <div className="allocation-status">
-                    {locked ? (
-                      <LockKeyhole size={13} />
-                    ) : a.status === 'OWNED' ? (
-                      <Check size={13} />
-                    ) : (
-                      <Repeat2 size={13} />
-                    )}{' '}
-                    {a.status.replaceAll('_', ' ').toLowerCase()} ·{' '}
-                    {locked ? 'Final demand' : 'Not manufactured yet'}
-                  </div>
-                  <div className="card-actions">
-                    {!a.revealed ? (
-                      <Link className="button primary" href={'/reveal/' + a.id}>
-                        Open my box <ArrowUpRight size={16} />
-                      </Link>
-                    ) : (
-                      <>
-                        <Link
-                          className="button secondary"
-                          href={locked ? '/drop' : '/trades?allocation=' + a.id}
-                        >
-                          {locked
-                            ? 'View campaign'
-                            : a.status === 'OWNED'
-                              ? 'Find a trade'
-                              : 'View trade'}{' '}
-                          <ArrowUpRight size={16} />
-                        </Link>
-                        <button
-                          className="icon-button"
-                          aria-label={'Download ' + ch?.name + ' card'}
-                          onClick={() => downloadCard(ch?.name || '', ch?.rarity || '')}
-                        >
-                          <Download size={16} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
-      <div className="collection-footnote">
-        <Package size={25} />
-        <div>
-          <h3>Digital first. Physical next.</h3>
-          <p>
-            We manufacture the final confirmed allocations after trading closes. Your order follows
-            the kin you own when allocations lock.
+          <h1>My collection</h1>
+          <p className="lead">
+            {data.collection.length === 1
+              ? 'You own 1 Astral Kin box.'
+              : `You own ${data.collection.length} Astral Kin boxes.`}{' '}
+            {locked
+              ? 'Allocations are final.'
+              : 'Nothing is made until allocations lock, so you can still trade.'}
           </p>
         </div>
       </div>
+      {data.collection.length === 0 ? (
+        <Empty
+          title="No boxes yet"
+          icon={<Package size={26} />}
+          action={<Button href="/drop">Go to the drop</Button>}
+        >
+          Win the free game on the drop page to unlock a slot, then open your first box here.
+        </Empty>
+      ) : (
+        <ul className="collection-grid">
+          {data.collection.map((a) => {
+            const ch = characters.find((c) => c.id === a.character_id);
+            const duplicate =
+              !!a.revealed &&
+              data.collection.filter((other) => other.character_id === a.character_id).length > 1;
+            return (
+              <li key={a.id} className="card collection-card">
+                <div className="collection-art">
+                  {duplicate && <span className="dup-badge">Duplicate</span>}
+                  {a.revealed ? <KinArt id={a.character_id} /> : <BoxArt />}
+                </div>
+                <div className="collection-body">
+                  {ch ? <Tier rarity={ch.rarity} /> : <span className="tier unopened">Sealed</span>}
+                  <h2 className="h3">{ch?.name || 'Sealed box'}</h2>
+                  <p className="status-line">
+                    {locked && <LockKeyhole size={16} aria-hidden="true" />}
+                    {a.revealed
+                      ? statusText[a.status] || 'Yours.'
+                      : 'Your kin is already chosen. Open it when you are ready.'}
+                  </p>
+                  <div className="row">
+                    {!a.revealed ? (
+                      <Button href={'/reveal/' + a.id}>Open my box</Button>
+                    ) : locked ? (
+                      <Button href="/drop" variant="ghost">
+                        View the drop
+                      </Button>
+                    ) : (
+                      <Button href={'/trades?allocation=' + a.id} variant="ghost">
+                        {a.status === 'OWNED' ? 'Find a trade' : 'View trade'}
+                      </Button>
+                    )}
+                    {!!a.revealed && ch && (
+                      <button
+                        className="icon-btn"
+                        aria-label={'Download ' + ch.name + ' card'}
+                        onClick={() => downloadCard(ch.name, ch.rarity)}
+                      >
+                        <Download size={20} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }

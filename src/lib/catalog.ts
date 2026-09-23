@@ -1,6 +1,7 @@
 export const characters = [
   {
     id: 'nova',
+    units: 21,
     name: 'Nova Scout',
     rarity: 'COMMON',
     color: '#FFB36B',
@@ -8,6 +9,7 @@ export const characters = [
   },
   {
     id: 'moss',
+    units: 21,
     name: 'Moss Oracle',
     rarity: 'COMMON',
     color: '#8FE08A',
@@ -15,6 +17,7 @@ export const characters = [
   },
   {
     id: 'tide',
+    units: 21,
     name: 'Tide Keeper',
     rarity: 'COMMON',
     color: '#6FC8FF',
@@ -22,6 +25,7 @@ export const characters = [
   },
   {
     id: 'ember',
+    units: 21,
     name: 'Ember Cub',
     rarity: 'COMMON',
     color: '#FF7F66',
@@ -29,6 +33,7 @@ export const characters = [
   },
   {
     id: 'eclipse',
+    units: 7,
     name: 'Eclipse Knight',
     rarity: 'RARE',
     color: '#FFD84D',
@@ -36,6 +41,7 @@ export const characters = [
   },
   {
     id: 'aurora',
+    units: 7,
     name: 'Aurora Warden',
     rarity: 'RARE',
     color: '#62E3C8',
@@ -43,6 +49,7 @@ export const characters = [
   },
   {
     id: 'void',
+    units: 2,
     name: 'The Void Prince',
     rarity: 'SECRET',
     color: '#C8A8FF',
@@ -96,3 +103,5 @@ export const lore = [
 ];
 export const money = (cents: number) =>
   new Intl.NumberFormat('en-SG', { style: 'currency', currency: 'SGD' }).format(cents / 100);
+/** Compact Singapore-dollar label for prices, e.g. S$18.90. */
+export const sgd = (cents: number) => 'S$' + (cents / 100).toFixed(2);

@@ -2,67 +2,62 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { ArrowUpRight, ArrowLeft, ShieldCheck, Repeat2, Check, Download } from 'lucide-react';
+import { ArrowLeft, Download, Repeat2 } from 'lucide-react';
 import { useLoop } from './provider';
-import { Stage } from './stage';
-import { BoxArt } from './art';
-import { Loading } from './shell';
-import { characters, money } from '../lib/catalog';
+import { BoxArt, KinArt } from './art';
+import { Pending } from './shell';
+import { characters, sgd } from '../lib/catalog';
 import type { Allocation } from '../lib/types';
+import { Button, Empty, Perforation, Tier } from './ui';
 export function Checkout() {
   const { data, act, busy } = useLoop(),
     router = useRouter(),
     [agreed, setAgreed] = useState(false);
-  if (!data) return <Loading />;
+  if (!data) return <Pending />;
   const access = data.access[0],
     c = data.campaign;
   return (
-    <section className="page checkout-page">
-      <div className="breadcrumb">
-        <Link href="/drop">
-          <ArrowLeft size={14} /> The drop
-        </Link>
-        <span>/</span>Your preorder
-      </div>
+    <section className="wrap checkout">
+      <Link className="back-link" href="/drop">
+        <ArrowLeft size={18} aria-hidden="true" /> Back to the drop
+      </Link>
       <div className="checkout-grid">
         <div className="checkout-art">
           <BoxArt />
-          <p>ONE BOX. ONE UNEXPECTED COMPANION.</p>
         </div>
-        <div>
-          <p className="eyebrow">
-            {access ? 'ACCESS EARNED · YOUR NEXT CHAPTER' : 'A LITTLE QUEST COMES FIRST'}
+        <div className="checkout-main">
+          <h1>{access ? 'Your slot is ready.' : 'Win a slot first.'}</h1>
+          <p className="lead">
+            {access
+              ? 'Pay for one sealed Astral Kin box. You open it straight after.'
+              : 'Slots are earned by winning the free game. Play once, then come back here.'}
           </p>
-          <h1>
-            Make room
-            <br />
-            for mystery.
-          </h1>
-          <p className="subtitle">Astral Kin Mystery Blind Box</p>
-          <div className="demo-notice">
-            <ShieldCheck size={22} />
-            <p>
-              <strong>Demo checkout</strong>
-              <br />
-              No real payment is processed. No card details needed.
-            </p>
+          <div className="panel ticket" aria-label="Order summary">
+            <div className="ticket-top">
+              <div>
+                <span className="ticket-label">Astral Kin mystery box</span>
+                <strong className="ticket-price">{sgd(c.price)}</strong>
+              </div>
+              <span className="demo-flag ticket-flag">Simulated payment (demo)</span>
+            </div>
+            <Perforation />
+            <dl className="ticket-rows">
+              <div>
+                <dt>Quantity</dt>
+                <dd>1 box</dd>
+              </div>
+              <div>
+                <dt>Delivery</dt>
+                <dd>After production (simulated)</dd>
+              </div>
+              <div>
+                <dt>Total</dt>
+                <dd>{sgd(c.price)} SGD</dd>
+              </div>
+            </dl>
           </div>
-          <dl className="order-summary">
-            <div>
-              <dt>Quantity</dt>
-              <dd>1 blind box</dd>
-            </div>
-            <div>
-              <dt>Shipping</dt>
-              <dd>Simulated fulfilment</dd>
-            </div>
-            <div>
-              <dt>Total preorder</dt>
-              <dd>{money(c.price)} SGD</dd>
-            </div>
-          </dl>
           {access ? (
-            <>
+            <div className="checkout-actions">
               <label className="consent">
                 <input
                   type="checkbox"
@@ -70,12 +65,12 @@ export function Checkout() {
                   onChange={(e) => setAgreed(e.target.checked)}
                 />
                 <span>
-                  I understand this is a blind-box allocation. My character is revealed after
-                  confirmation, and manufacture begins after final allocations lock.
+                  I understand this is a blind box. I can’t choose the character, and it is made
+                  after allocations lock.
                 </span>
               </label>
-              <button
-                className="button primary wide"
+              <Button
+                wide
                 disabled={!agreed || busy}
                 onClick={async () => {
                   const result = await act<{ allocationId: string }>({
@@ -85,117 +80,125 @@ export function Checkout() {
                   if (result) router.push('/reveal/' + result.allocationId);
                 }}
               >
-                {busy ? 'Confirming your place…' : 'Confirm demo preorder'}{' '}
-                <ArrowUpRight size={19} />
-              </button>
-              <p className="fine">
-                Access expires at{' '}
+                {busy ? 'Confirming…' : 'Confirm demo preorder'}
+              </Button>
+              <p className="note">
+                Your slot is held until{' '}
                 {new Date(access.expires_at).toLocaleTimeString('en-SG', {
                   hour: '2-digit',
                   minute: '2-digit',
                 })}
-                . Capacity is checked again when you confirm.
+                . We check that a box is still left when you confirm. No card details are needed in
+                this demo.
               </p>
-            </>
+            </div>
           ) : (
-            <Link className="button primary" href="/quest">
-              Play to unlock <ArrowUpRight size={19} />
-            </Link>
+            <Button href="/quest">Play to unlock</Button>
           )}
         </div>
       </div>
     </section>
   );
 }
+type Phase = 'sealed' | 'opening' | 'done';
+const SEQUENCE_MS = 2400;
 export function Reveal() {
   const params = useParams<{ id: string }>(),
     { data, act, busy } = useLoop(),
     [allocation, setAllocation] = useState<Allocation | null>(null),
-    [opened, setOpened] = useState(false),
-    [finished, setFinished] = useState(false);
+    [phase, setPhase] = useState<Phase>('sealed');
   useEffect(() => {
-    if (!opened) return;
-    const timer = setTimeout(
-      () => setFinished(true),
-      matchMedia('(prefers-reduced-motion: reduce)').matches ? 30 : 2900,
-    );
+    if (phase !== 'opening') return;
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const timer = setTimeout(() => setPhase('done'), reduced ? 0 : SEQUENCE_MS);
     return () => clearTimeout(timer);
-  }, [opened]);
-  if (!data) return <Loading />;
+  }, [phase]);
+  if (!data) return <Pending />;
   const existing = data.collection.find((a) => a.id === params.id);
   if (!existing)
     return (
-      <section className="page empty">
-        <h1>This box isn’t in your collection.</h1>
-        <Link className="button primary" href="/collection">
-          Back to my collection
-        </Link>
+      <section className="wrap page-pad">
+        <Empty
+          heading="h1"
+          title="This box isn’t in your collection."
+          action={<Button href="/collection">Back to my collection</Button>}
+        >
+          It may belong to another account, or the link is wrong.
+        </Empty>
       </section>
     );
+  // Revisiting an already-opened box shows the final frame immediately.
+  const shown: Phase = phase === 'sealed' && existing.revealed && allocation === null ? 'done' : phase;
   const ch = characters.find((c) => c.id === (allocation?.character_id || existing.character_id));
   const duplicate = data.collection.filter((a) => a.character_id === ch?.id).length > 1;
+  const tier = ch?.rarity.toLowerCase() ?? 'common';
   const open = async () => {
     const a = await act<Allocation>({ action: 'reveal', allocationId: params.id });
     if (a) {
       setAllocation(a);
-      setOpened(true);
+      setPhase('opening');
     }
   };
   return (
-    <section className={'reveal-page ' + (finished ? 'revealed' : '')}>
-      <div className="reveal-top">
-        <Link href="/collection">
-          <ArrowLeft size={16} /> My collection
-        </Link>
-        <span>ASTRAL KIN · DIGITAL UNBOXING</span>
-        <span>BOX / {params.id.slice(0, 6).toUpperCase()}</span>
+    <section className={'wrap reveal is-' + shown + ' tier-' + tier}>
+      <Link className="back-link" href="/collection">
+        <ArrowLeft size={18} aria-hidden="true" /> My collection
+      </Link>
+      <p className="reveal-kicker">
+        {shown === 'done' ? 'Your Astral Kin' : 'One sealed box, already allocated to you'}
+      </p>
+      <div className="reveal-stage">
+        <div className="burst" aria-hidden="true" />
+        {ch && shown !== 'sealed' && <KinArt id={ch.id} className="reveal-kin" />}
+        <div className="halves" aria-hidden="true">
+          <div className="half l">
+            <BoxArt />
+          </div>
+          <div className="half r">
+            <BoxArt />
+          </div>
+        </div>
+        {shown === 'sealed' && <span className="visually-hidden">A sealed Astral Kin box</span>}
       </div>
-      <div className="reveal-title">
-        <p className="eyebrow">
-          {finished ? 'A NEW CONNECTION, FOUND' : 'A SMALL UNIVERSE, WAITING'}
-        </p>
-        <h1>{finished ? ch?.name : 'Some things find you.'}</h1>
-        <p>
-          {finished ? ch?.description : 'Your kin is already chosen. This is the moment you meet.'}
-        </p>
-      </div>
-      <div className="reveal-stage-wrap">
-        <div className="reveal-ring" />
-        <Stage mode="reveal" opened={opened} character={ch?.id} />
-      </div>
-      <div className="reveal-actions" aria-live="polite">
-        {!opened ? (
+      <div className="reveal-copy" aria-live="polite">
+        {shown === 'done' && ch ? (
           <>
-            <button className="button primary" onClick={open} disabled={busy}>
-              Open my box <ArrowUpRight size={20} />
-            </button>
-            <span className="fine">One allocation. Yours to keep. Never rerolled.</span>
-          </>
-        ) : finished ? (
-          <>
-            <span className={'rarity ' + ch?.rarity.toLowerCase()}>{ch?.rarity} · SERIES 01</span>
+            <Tier rarity={ch.rarity} />
+            <h1>{ch.name}</h1>
+            <p>{ch.description}</p>
             {duplicate && (
-              <p className="duplicate">
-                A familiar face. You have a duplicate — find a new kin in the trade room.
-              </p>
+              <div className="dup">
+                You have a duplicate.{' '}
+                <b>Swap it for another {ch.rarity.toLowerCase()}.</b>
+              </div>
             )}
-            <div className="button-row">
-              <Link className="button primary" href={'/trades?allocation=' + params.id}>
-                <Repeat2 size={18} /> Find a trade
-              </Link>
-              <Link className="button secondary" href="/collection">
-                <Check size={18} /> Keep my kin
-              </Link>
-              <button
-                className="button quiet"
-                onClick={() => downloadCard(ch?.name || 'Astral Kin', ch?.rarity || 'RARE')}
+            <div className="reveal-actions">
+              <Button href={'/trades?allocation=' + params.id}>
+                <Repeat2 size={20} aria-hidden="true" /> Find a trade
+              </Button>
+              <Button href="/collection" variant="ghost">
+                Keep my kin
+              </Button>
+              <Button
+                variant="quiet"
+                onClick={() => downloadCard(ch.name, ch.rarity)}
               >
-                <Download size={17} /> Save card
-              </button>
+                <Download size={18} aria-hidden="true" /> Save card
+              </Button>
             </div>
           </>
+        ) : shown === 'opening' ? (
+          <h1 className="reveal-wait">Opening…</h1>
         ) : (
-          <p className="eyebrow">CONNECTING YOUR CONSTELLATION…</p>
+          <>
+            <h1>Your box is sealed.</h1>
+            <p>The character inside was fixed when you paid. Opening it never changes it.</p>
+            <div className="reveal-actions">
+              <Button onClick={open} disabled={busy}>
+                Open my box
+              </Button>
+            </div>
+          </>
         )}
       </div>
     </section>

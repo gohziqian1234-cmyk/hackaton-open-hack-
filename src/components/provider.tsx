@@ -33,6 +33,8 @@ export async function api<T>(data?: unknown): Promise<T> {
 }
 type Context = {
   data: Snapshot | null;
+  loadFailed: boolean;
+  retry: () => void;
   refresh: () => Promise<void>;
   busy: boolean;
   error: string;
@@ -43,20 +45,26 @@ const Store = createContext<Context | null>(null);
 export function Provider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<Snapshot | null>(null),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState('');
+    [error, setError] = useState(''),
+    [loadFailed, setLoadFailed] = useState(false),
+    [attempt, setAttempt] = useState(0);
   const refresh = useCallback(async () => {
     setData(await api<Snapshot>());
+  }, []);
+  const retry = useCallback(() => {
+    setLoadFailed(false);
+    setAttempt((n) => n + 1);
   }, []);
   useEffect(() => {
     api<Snapshot>()
       .then(setData)
-      .catch((e) => setError(e.message));
+      .catch(() => setLoadFailed(true));
     const onFocus = () => {
       refresh().catch(() => {});
     };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [refresh]);
+  }, [refresh, attempt]);
   const act = useCallback(
     async <T,>(body: unknown) => {
       setBusy(true);
@@ -77,7 +85,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
     await act({ action: 'login', user });
   };
   return (
-    <Store.Provider value={{ data, refresh, busy, error, act, login }}>
+    <Store.Provider value={{ data, loadFailed, retry, refresh, busy, error, act, login }}>
       {children}
       {error && (
         <div className="toast" role="alert">
