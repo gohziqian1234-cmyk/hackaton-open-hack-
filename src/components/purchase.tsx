@@ -3,16 +3,18 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, Download, Loader, Repeat2 } from 'lucide-react';
-import { useLoop } from './provider';
+import { kinOf, useCampaign, useLoop } from './provider';
 import { BoxArt, KinArt } from './art';
 import { Pending } from './shell';
-import { characters, sgd } from '../lib/catalog';
+import { sgd } from '../lib/catalog';
 import type { Allocation } from '../lib/types';
 import { Button, Empty, ErrorNote, Perforation, Tier } from './ui';
 export function Checkout() {
-  const { data, act, busy } = useLoop(),
+  const params = useSearchParams(),
+    campaignId = params.get('campaign') || 'astral',
+    data = useCampaign(campaignId),
+    { act, busy } = useLoop(),
     router = useRouter(),
-    params = useSearchParams(),
     cancelled = params.get('cancelled') === '1',
     [adult, setAdult] = useState(false),
     released = useRef(false),
@@ -45,7 +47,7 @@ export function Checkout() {
     new Date(ms).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' });
   return (
     <section className="wrap checkout">
-      <Link className="back-link" href="/drop">
+      <Link className="back-link" href={'/drop' + (campaignId === 'astral' ? '' : '?campaign=' + campaignId)}>
         <ArrowLeft size={18} aria-hidden="true" /> Back to the drop
       </Link>
       <div className="checkout-grid">
@@ -63,7 +65,7 @@ export function Checkout() {
           )}
           <p className="lead">
             {access
-              ? 'Pay for one sealed Astral Kin box. You open it straight after.'
+              ? `Pay for one sealed ${c.name} box. You open it straight after.`
               : pending
                 ? 'You started paying for a box. Finish on the payment page, or check its status.'
                 : 'Slots are earned by winning the free game. Play once, then come back here.'}
@@ -139,7 +141,9 @@ export function Checkout() {
               </Button>
             </div>
           ) : (
-            <Button href="/quest">Play to unlock</Button>
+            <Button href={'/quest' + (campaignId === 'astral' ? '' : '?campaign=' + campaignId)}>
+              Play to unlock
+            </Button>
           )}
         </div>
       </div>
@@ -276,7 +280,8 @@ export function Reveal() {
     );
   // Revisiting an already-opened box shows the final frame immediately.
   const shown: Phase = phase === 'sealed' && existing.revealed && allocation === null ? 'done' : phase;
-  const ch = characters.find((c) => c.id === (allocation?.character_id || existing.character_id));
+  const ch = kinOf(data, allocation?.character_id || existing.character_id);
+  const boxCampaign = data.campaigns.find((c) => c.id === existing.campaign_id);
   const duplicate = data.collection.filter((a) => a.character_id === ch?.id).length > 1;
   const tier = ch?.rarity.toLowerCase() ?? 'common';
   const open = async () => {
@@ -293,14 +298,16 @@ export function Reveal() {
       </Link>
       <p className="reveal-kicker">
         {existing.position != null
-          ? `Box ${existing.position + 1} of ${data.campaign.capacity}`
+          ? `Box ${existing.position + 1} of ${boxCampaign?.capacity ?? data.campaign.capacity}`
           : shown === 'done'
             ? 'Your Astral Kin'
             : 'One sealed box, already allocated to you'}
       </p>
       <div className="reveal-stage">
         <div className="burst" aria-hidden="true" />
-        {ch && shown !== 'sealed' && <KinArt id={ch.id} className="reveal-kin" />}
+        {ch && shown !== 'sealed' && (
+          <KinArt id={ch.id} name={ch.name} color={ch.color} className="reveal-kin" />
+        )}
         <div className="halves" aria-hidden="true">
           <div className="half l">
             <BoxArt />

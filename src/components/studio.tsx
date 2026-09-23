@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { Check, Download, Factory, RefreshCw, Settings2, X } from 'lucide-react';
-import { useLoop } from './provider';
+import { useCampaign, useLoop } from './provider';
 import { Loading, Pending } from './shell';
 import { characters, phaseIndex, phaseLabel, phases, sgd } from '../lib/catalog';
 import { percent, sellThrough } from '../domain/metrics';
@@ -9,7 +9,8 @@ import { Button, Empty, ErrorNote, Stat } from './ui';
 import { AdminConsole } from './admin';
 import type { Analytics, Campaign } from '../lib/types';
 export function Studio() {
-  const { data, login, act, busy } = useLoop(),
+  const data = useCampaign('astral'),
+    { login, act, busy } = useLoop(),
     [analytics, setAnalytics] = useState<Analytics | null>(null),
     [fetchError, setFetchError] = useState(''),
     [version, setVersion] = useState(0);

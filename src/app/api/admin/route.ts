@@ -1,12 +1,12 @@
-import { getDb } from '../../../server/db';
+import { openService } from '../../../server/app';
 import { currentUser, failure, json } from '../../../server/http';
-import { DomainError, Loopbox } from '../../../server/service';
+import { DomainError } from '../../../server/service';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 /** ADMIN console data. Every read checks the ADMIN role in the service. */
 export async function GET(request: Request) {
   try {
-    const service = new Loopbox(getDb());
+    const service = openService();
     const user = await currentUser(service);
     if (!user) throw new DomainError('SIGN_IN_REQUIRED', 401);
     const entity = new URL(request.url).searchParams.get('entity') || undefined;
@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     return json({
       campaigns: service.adminCampaigns(user.id),
       audit: service.auditLog(user.id, entity),
+      applications: service.applications(user.id),
     });
   } catch (e) {
     return failure(e);

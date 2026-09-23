@@ -27,6 +27,7 @@ export interface Allocation {
   status: string;
   revealed: number;
   order_id: string;
+  campaign_id: string;
   position?: number | null;
 }
 export interface Access {
@@ -47,9 +48,33 @@ export interface Match {
   requested: string;
   partner: string;
 }
+export interface CharacterInfo {
+  id: string;
+  campaign_id: string;
+  name: string;
+  rarity: 'COMMON' | 'RARE' | 'SECRET';
+  units: number;
+  color: string | null;
+  description: string | null;
+}
+export interface CampaignCard {
+  id: string;
+  name: string;
+  phase: Phase;
+  price: number;
+  capacity: number;
+  confirmed: number;
+  starts_at: number;
+  ends_at: number;
+  trade_ends_at: number;
+  partner: string | null;
+  partner_type: 'BRAND' | 'COLLECTIVE' | null;
+}
 export interface Snapshot {
   serverTime: number;
   campaign: Campaign;
+  campaigns: CampaignCard[];
+  characters: CharacterInfo[];
   weights: number[];
   user: User | null;
   access: Access[];
@@ -87,6 +112,7 @@ export interface AdminCampaign {
 }
 export interface OrderSummary {
   id: string;
+  campaign_id: string;
   status: 'PENDING_PAYMENT' | 'PAID' | 'DEMO_PAID' | 'EXPIRED' | 'REFUNDED';
   created_at: number;
   allocation_id: string | null;

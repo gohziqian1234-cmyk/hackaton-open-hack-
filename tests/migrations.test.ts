@@ -24,8 +24,13 @@ describe('forward-only migrations', () => {
               (c) => c.name === name,
             ),
           );
-        // v1 only knew collectors and businesses.
-        const where = table === 'users' ? " WHERE role IN ('COLLECTOR','BUSINESS')" : '';
+        // v1 only knew collectors, businesses and the one live Astral Kin campaign.
+        const where =
+          table === 'users'
+            ? " WHERE role IN ('COLLECTOR','BUSINESS')"
+            : table === 'campaigns' || table === 'characters'
+              ? ` WHERE ${table === 'campaigns' ? 'id' : 'campaign_id'}='astral'`
+              : '';
         const rows = v1.prepare(`SELECT ${cols.join(',')} FROM ${table}${where}`).all();
         const insert = old.prepare(
           `INSERT INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,

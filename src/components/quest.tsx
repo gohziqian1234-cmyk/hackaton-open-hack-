@@ -3,13 +3,17 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Clock, Pause, Play, RotateCcw } from 'lucide-react';
 import { questConfig, lore } from '../lib/catalog';
 import { wave, waveDuration } from '../lib/game';
-import { useLoop } from './provider';
+import { useCampaign, useLoop } from './provider';
+import { useSearchParams } from 'next/navigation';
 import { KinArt } from './art';
 import { Button } from './ui';
 type Session = { id: string; seed: number; mode: string };
 type Result = { won: boolean; score: number; accessId?: string };
 export default function Quest() {
-  const { data, login, act, busy } = useLoop(),
+  const campaignId = useSearchParams().get('campaign') || 'astral',
+    query = campaignId === 'astral' ? '' : '?campaign=' + campaignId,
+    data = useCampaign(campaignId),
+    { login, act, busy } = useLoop(),
     [mode, setMode] = useState<'run' | 'lore'>('run'),
     [session, setSession] = useState<Session | null>(null),
     [result, setResult] = useState<Result | null>(null),
@@ -27,7 +31,7 @@ export default function Quest() {
     finishing = useRef(false);
   const start = async () => {
     if (!data?.user || data.user.role !== 'COLLECTOR') await login('collector');
-    const g = await act<Session>({ action: 'start', mode });
+    const g = await act<Session>({ action: 'start', mode, campaignId });
     if (g) {
       setSession(g);
       setAnswers([]);
@@ -142,7 +146,7 @@ export default function Quest() {
                 Each collector gets {data.attemptLimit} free tries a day so bots can’t farm slots.
                 Your tries reset at midnight, Singapore time.
               </p>
-              <Button href="/drop" variant="ghost">
+              <Button href={'/drop' + query} variant="ghost">
                 Back to the drop
               </Button>
             </div>
@@ -160,11 +164,11 @@ export default function Quest() {
               {result.won ? (
                 <>
                   <div className="access-ticket">
-                    <span>Astral Kin, series 01</span>
+                    <span>{data?.campaign.name ?? 'Astral Kin'}, series 01</span>
                     <strong>1 preorder slot</strong>
                     <small>Held for 15 minutes, while boxes last</small>
                   </div>
-                  <Button href="/checkout">Claim preorder slot</Button>
+                  <Button href={'/checkout' + query}>Claim preorder slot</Button>
                 </>
               ) : (
                 <Button onClick={start}>
@@ -346,7 +350,7 @@ export default function Quest() {
               disabled={busy}
               onClick={async () => {
                 if (!data.user || data.user.role !== 'COLLECTOR') await login('collector');
-                const r = await act<Result>({ action: 'demoWin' });
+                const r = await act<Result>({ action: 'demoWin', campaignId });
                 if (r) {
                   setSession(null);
                   setResult(r);

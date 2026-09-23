@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { seedPartnerDemo } from './demo-data';
 
 export const pragmas = `
 PRAGMA foreign_keys=ON;
@@ -214,6 +215,29 @@ CREATE TRIGGER capacity_guard_revive BEFORE UPDATE OF status ON orders WHEN NEW.
         }
       if (db.prepare("SELECT 1 FROM users WHERE id='collector'").get())
         db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('admin','Admin','ADMIN',?)").run(now);
+    },
+  },
+  {
+    id: 6,
+    name: 'Accounts: password sign-in, lockout, hashed session tokens',
+    up: (db) => {
+      addColumn(db, 'users', 'password_hash', 'TEXT');
+      addColumn(db, 'users', 'failed_logins', 'INTEGER NOT NULL DEFAULT 0');
+      addColumn(db, 'users', 'locked_until', 'INTEGER');
+      addColumn(db, 'sessions', 'created_at', 'INTEGER NOT NULL DEFAULT 0');
+      // Tokens used to be stored as-is. They are now stored as SHA-256 hashes, so old rows
+      // can never match again: sign everyone out once.
+      db.exec('DELETE FROM sessions; CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);');
+    },
+  },
+  {
+    id: 7,
+    name: 'M7 partner applications',
+    up: (db) => {
+      db.exec(`
+CREATE TABLE IF NOT EXISTS partner_applications(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),type TEXT NOT NULL CHECK(type IN ('BRAND','COLLECTIVE')),org_name TEXT NOT NULL CHECK(length(org_name) BETWEEN 2 AND 80),contact_email TEXT NOT NULL,website TEXT,proof_url TEXT,portfolio_url TEXT,members_count INTEGER CHECK(members_count IS NULL OR members_count BETWEEN 2 AND 500),proposed_series TEXT NOT NULL,ip_statement TEXT NOT NULL CHECK(length(ip_statement)>=20),status TEXT NOT NULL CHECK(status IN ('SUBMITTED','APPROVED','REJECTED','INFO_REQUESTED')),admin_note TEXT,partner_id TEXT REFERENCES partners(id),created_at INTEGER NOT NULL,decided_at INTEGER);
+CREATE INDEX IF NOT EXISTS partner_applications_user ON partner_applications(user_id,status);`);
+      if (db.prepare("SELECT 1 FROM users WHERE id='collector'").get()) seedPartnerDemo(db, Date.now());
     },
   },
 ];

@@ -1,8 +1,8 @@
 'use client';
 import { Download, LockKeyhole, Package } from 'lucide-react';
-import { useLoop } from './provider';
+import { kinOf, useLoop } from './provider';
 import { KinArt, BoxArt } from './art';
-import { characters, phaseIndex } from '../lib/catalog';
+import { phaseIndex } from '../lib/catalog';
 import { Pending } from './shell';
 import { downloadCard } from './purchase';
 import { Button, Empty, Tier } from './ui';
@@ -35,7 +35,9 @@ export function Collection() {
   const { data } = useLoop();
   if (!data) return <Pending />;
   if (data.user?.role !== 'COLLECTOR') return <CollectorGate />;
-  const locked = phaseIndex(data.campaign.phase) >= 4;
+  const lockedFor = (campaignId: string) =>
+    phaseIndex(data.campaigns.find((c) => c.id === campaignId)?.phase ?? 'ACTIVE_PREORDER') >= 4;
+  const locked = data.collection.length > 0 && data.collection.every((a) => lockedFor(a.campaign_id));
   return (
     <section className="wrap collection">
       <div className="page-heading">
@@ -43,8 +45,8 @@ export function Collection() {
           <h1>My collection</h1>
           <p className="lead">
             {data.collection.length === 1
-              ? 'You own 1 Astral Kin box.'
-              : `You own ${data.collection.length} Astral Kin boxes.`}{' '}
+              ? 'You own 1 box.'
+              : `You own ${data.collection.length} boxes.`}{' '}
             {locked
               ? 'Allocations are final.'
               : 'Nothing is made until allocations lock, so you can still trade.'}
@@ -62,7 +64,8 @@ export function Collection() {
       ) : (
         <ul className="collection-grid">
           {data.collection.map((a) => {
-            const ch = characters.find((c) => c.id === a.character_id);
+            const ch = kinOf(data, a.character_id),
+              final = lockedFor(a.campaign_id);
             const duplicate =
               !!a.revealed &&
               data.collection.filter((other) => other.character_id === a.character_id).length > 1;
@@ -70,13 +73,17 @@ export function Collection() {
               <li key={a.id} className="card collection-card">
                 <div className="collection-art">
                   {duplicate && <span className="dup-badge">Duplicate</span>}
-                  {a.revealed ? <KinArt id={a.character_id} /> : <BoxArt />}
+                  {a.revealed && ch ? (
+                    <KinArt id={ch.id} name={ch.name} color={ch.color} />
+                  ) : (
+                    <BoxArt />
+                  )}
                 </div>
                 <div className="collection-body">
                   {ch ? <Tier rarity={ch.rarity} /> : <span className="tier unopened">Sealed</span>}
                   <h2 className="h3">{ch?.name || 'Sealed box'}</h2>
                   <p className="status-line">
-                    {locked && <LockKeyhole size={16} aria-hidden="true" />}
+                    {final && <LockKeyhole size={16} aria-hidden="true" />}
                     {a.revealed
                       ? statusText[a.status] || 'Yours.'
                       : 'Your kin is already chosen. Open it when you are ready.'}
@@ -84,7 +91,7 @@ export function Collection() {
                   <div className="row">
                     {!a.revealed ? (
                       <Button href={'/reveal/' + a.id}>Open my box</Button>
-                    ) : locked ? (
+                    ) : final ? (
                       <Button href="/drop" variant="ghost">
                         View the drop
                       </Button>

@@ -4,14 +4,23 @@ export function KinArt({
   id = 'eclipse',
   className = '',
   silhouette = false,
+  name,
+  color,
 }: {
   id?: string;
   className?: string;
   silhouette?: boolean;
+  /** Partner characters are not in the catalogue: pass their name and colour. */
+  name?: string;
+  color?: string | null;
 }) {
   const uid = useId().replaceAll(':', '');
-  const found = characters.find((c) => c.id === id) || characters[4];
-  const ch = silhouette ? { ...found, name: 'Secret kin', color: '#40377F' } : found;
+  const base = characters.find((c) => c.id === id) || characters[4];
+  const found = {
+    name: name ?? base.name,
+    color: color ?? base.color,
+  };
+  const ch = silhouette ? { name: 'Secret kin', color: '#40377F' } : found;
   return (
     <svg
       className={(className + ' kin-art').trim()}

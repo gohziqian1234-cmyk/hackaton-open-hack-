@@ -1,6 +1,7 @@
 'use client';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import type { Snapshot } from '../lib/types';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import type { CharacterInfo, Snapshot } from '../lib/types';
+import { characters as catalog } from '../lib/catalog';
 const messages: Record<string, string> = {
   SOLD_OUT: 'The last box has been claimed. Join the waitlist for the next drop.',
   PURCHASE_LIMIT: 'You’ve reached your limit for this drop. Your collection is ready to explore.',
@@ -53,6 +54,7 @@ type Context = {
   error: string;
   act: <T>(body: unknown, url?: string) => Promise<T | undefined>;
   login: (user: string) => Promise<void>;
+  selectCampaign: (id: string) => void;
 };
 const Store = createContext<Context | null>(null);
 export function Provider({ children }: { children: React.ReactNode }) {
@@ -60,16 +62,25 @@ export function Provider({ children }: { children: React.ReactNode }) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [loadFailed, setLoadFailed] = useState(false),
-    [attempt, setAttempt] = useState(0);
+    [attempt, setAttempt] = useState(0),
+    [campaignId, setCampaignId] = useState('astral'),
+    selected = useRef('astral');
+  // The snapshot is always for one campaign; pages pick it with useCampaign().
+  const snapshotUrl = () => '/api/loopbox?campaign=' + encodeURIComponent(selected.current);
   const refresh = useCallback(async () => {
-    setData(await api<Snapshot>());
+    setData(await api<Snapshot>(undefined, snapshotUrl()));
+  }, []);
+  const selectCampaign = useCallback((id: string) => {
+    if (selected.current === id) return;
+    selected.current = id;
+    setCampaignId(id);
   }, []);
   const retry = useCallback(() => {
     setLoadFailed(false);
     setAttempt((n) => n + 1);
   }, []);
   useEffect(() => {
-    api<Snapshot>()
+    api<Snapshot>(undefined, snapshotUrl())
       .then(setData)
       .catch(() => setLoadFailed(true));
     const onFocus = () => {
@@ -77,7 +88,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [refresh, attempt]);
+  }, [refresh, attempt, campaignId]);
   const act = useCallback(
     async <T,>(body: unknown, url?: string) => {
       setBusy(true);
@@ -98,7 +109,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
     await act({ action: 'login', user });
   };
   return (
-    <Store.Provider value={{ data, loadFailed, retry, refresh, busy, error, act, login }}>
+    <Store.Provider
+      value={{ data, loadFailed, retry, refresh, busy, error, act, login, selectCampaign }}
+    >
       {children}
       {error && (
         <div className="toast" role="alert">
@@ -115,4 +128,32 @@ export function useLoop() {
   const value = useContext(Store);
   if (!value) throw new Error('Missing LoopBox provider');
   return value;
+}
+/** Selects the campaign for this page. Returns the snapshot only once it is for that campaign. */
+export function useCampaign(id: string) {
+  const { data, selectCampaign } = useLoop();
+  useEffect(() => selectCampaign(id), [id, selectCampaign]);
+  return data && data.campaign.id === id ? data : null;
+}
+export type Kin = Pick<CharacterInfo, 'id' | 'name' | 'rarity' | 'description'> & {
+  color: string;
+  units: number;
+  campaign_id: string;
+};
+/** Character details from the database (partner series) with the built-in catalogue as fallback. */
+export function kinOf(data: Snapshot | null, id: string | undefined): Kin | undefined {
+  if (!id) return undefined;
+  const row = data?.characters.find((c) => c.id === id);
+  const base = catalog.find((c) => c.id === id);
+  if (row)
+    return {
+      id: row.id,
+      name: row.name,
+      rarity: row.rarity,
+      description: row.description ?? base?.description ?? '',
+      color: row.color ?? base?.color ?? '#B7B0E0',
+      units: row.units,
+      campaign_id: row.campaign_id,
+    };
+  return base ? { ...base, campaign_id: 'astral' } : undefined;
 }

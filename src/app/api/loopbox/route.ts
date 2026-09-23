@@ -1,19 +1,28 @@
+import { openService } from '../../../server/app';
 import { cookies } from 'next/headers';
-import { getDb } from '../../../server/db';
-import { Loopbox, DomainError } from '../../../server/service';
+import { DomainError } from '../../../server/service';
 import { actionSchema } from '../../../server/validation';
-import { assertSameOrigin, failure, json as response } from '../../../server/http';
+import {
+  SESSION_COOKIE,
+  assertSameOrigin,
+  failure,
+  json as response,
+  sessionCookie,
+} from '../../../server/http';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   try {
-    const service = new Loopbox(getDb());
-    const user = service.identity((await cookies()).get('loopbox_session')?.value);
-    if (new URL(request.url).searchParams.has('analytics')) {
+    const service = openService();
+    const user = service.identity((await cookies()).get(SESSION_COOKIE)?.value);
+    const params = new URL(request.url).searchParams;
+    const campaign = params.get('campaign') ?? 'astral';
+    if (!/^[a-z0-9-]{1,64}$/.test(campaign)) throw new DomainError('INVALID_INPUT', 400);
+    if (params.has('analytics')) {
       if (!user) throw new DomainError('SIGN_IN_REQUIRED', 401);
-      return response(service.analytics(user.id));
+      return response(service.analytics(user.id, campaign));
     }
-    return response(service.snapshot(user));
+    return response(service.snapshot(user, campaign));
   } catch (e) {
     return failure(e);
   }
@@ -26,28 +35,40 @@ export async function POST(request: Request) {
     const parsed = actionSchema.safeParse(JSON.parse(text));
     if (!parsed.success) throw new DomainError('INVALID_INPUT', 400);
     const data = parsed.data;
-    const service = new Loopbox(getDb()),
+    const service = openService(),
       jar = await cookies();
+    const old = jar.get(SESSION_COOKIE)?.value;
+    const startSession = (token: string) => {
+      // Rotate: the previous session (if any) is destroyed before the new one is issued.
+      service.logout(old);
+      jar.set(SESSION_COOKIE, token, sessionCookie(request));
+    };
     if (data.action === 'login') {
-      const old = jar.get('loopbox_session')?.value;
-      if (old) service.run('DELETE FROM sessions WHERE token=?', old);
-      const token = service.login(data.user);
-      jar.set('loopbox_session', token, {
-        httpOnly: true,
-        sameSite: 'strict',
-        secure: new URL(request.url).protocol === 'https:',
-        path: '/',
-        maxAge: 86400,
-      });
+      startSession(service.login(data.user));
       return response({ ok: true });
     }
-    const user = service.identity(jar.get('loopbox_session')?.value);
+    if (data.action === 'signup') {
+      const { token } = service.signup(data.name, data.email, data.password);
+      startSession(token);
+      return response({ ok: true });
+    }
+    if (data.action === 'signin') {
+      const { token } = service.signin(data.email, data.password);
+      startSession(token);
+      return response({ ok: true });
+    }
+    if (data.action === 'signout') {
+      service.logout(old);
+      jar.delete(SESSION_COOKIE);
+      return response({ ok: true });
+    }
+    const user = service.identity(old);
     if (!user) throw new DomainError('SIGN_IN_REQUIRED', 401);
     switch (data.action) {
       case 'start':
-        return response(service.startGame(user.id, data.mode));
+        return response(service.startGame(user.id, data.mode, data.campaignId));
       case 'demoWin':
-        return response(service.demoWin(user.id));
+        return response(service.demoWin(user.id, data.campaignId));
       case 'complete':
         return response(service.completeGame(user.id, data.sessionId, data.values));
       case 'preorder':
@@ -72,12 +93,20 @@ export async function POST(request: Request) {
         return response(service.closeCampaign(user.id, data.campaignId));
       case 'sweep':
         return response(service.sweep(user.id));
+      case 'applyPartner':
+        return response(service.applyPartner(user.id, data.application));
+      case 'decideApplication':
+        return response(
+          service.decideApplication(user.id, data.applicationId, data.decision, data.note),
+        );
+      case 'saveDraftCampaign':
+        return response(service.saveDraftCampaign(user.id, data.campaign));
+      case 'submitCampaign':
+        return response(service.submitCampaign(user.id, data.campaignId));
       case 'edit':
         return response(service.edit(user.id, data.changes));
       case 'waitlist':
-        service.collector(user.id);
-        service.run('INSERT OR IGNORE INTO waitlist VALUES (?,?)', user.id, 'astral');
-        return response({ ok: true });
+        return response(service.waitlist(user.id, data.campaignId));
     }
   } catch (e) {
     return failure(e);

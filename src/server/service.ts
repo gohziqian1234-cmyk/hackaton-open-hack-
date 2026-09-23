@@ -1,4 +1,4 @@
-import { randomUUID, randomInt } from 'node:crypto';
+import { randomBytes, randomUUID, randomInt } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { lore, phaseIndex, phases, questConfig } from '../lib/catalog';
 import { scoreRun } from '../lib/game';
@@ -6,6 +6,7 @@ import { startOfSgtDay } from '../domain/time';
 import { winRate } from '../domain/metrics';
 import { buildPool, commitment, newSeedHex, shuffle, verify } from '../domain/fairness';
 import { DEMO_SEED_HEX } from './seed';
+import { hashPassword, hashToken, verifyPassword } from './password';
 import {
   SESSION_MINUTES,
   createCheckoutSession,
@@ -26,10 +27,15 @@ import type {
   OrderSummary,
   AuditRow,
   AdminCampaign,
+  CampaignCard,
+  CharacterInfo,
 } from '../lib/types';
 
 import { DomainError } from './errors';
 export { DomainError };
+const SESSION_TTL_MS = 86400000,
+  MAX_FAILED_LOGINS = 5,
+  LOCKOUT_MS = 15 * 60000;
 /** Order statuses that hold a seat against capacity. */
 const ACTIVE = "('PENDING_PAYMENT','PAID','DEMO_PAID')";
 export type PaymentSession = {
@@ -57,7 +63,7 @@ type GameSession = {
 export class Loopbox {
   constructor(
     public db: DatabaseSync,
-    private now = () => Date.now(),
+    protected now = () => Date.now(),
     public demo = process.env.DEMO_MODE !== 'false',
   ) {}
   one<T>(sql: string, ...args: SQLInputValue[]) {
@@ -119,20 +125,20 @@ export class Loopbox {
   collector(id: string) {
     if (this.user(id).role !== 'COLLECTOR') throw new DomainError('COLLECTOR_ONLY', 403);
   }
-  purchases(id: string) {
+  purchases(id: string, campaignId = 'astral') {
     return this.one<{ n: number }>(
       `SELECT COUNT(*) AS n FROM orders WHERE user_id=? AND campaign_id=? AND status IN ${ACTIVE}`,
       id,
-      'astral',
+      campaignId,
     )!.n;
   }
-  eligible(id: string) {
+  eligible(id: string, campaignId = 'astral') {
     this.collector(id);
-    const c = this.campaign();
+    const c = this.campaign(campaignId);
     if (c.phase !== 'ACTIVE_PREORDER' || this.now() < c.starts_at || this.now() >= c.ends_at)
       throw new DomainError('PREORDER_CLOSED');
     if (c.confirmed >= c.capacity) throw new DomainError('SOLD_OUT');
-    if (this.purchases(id) >= c.max_per_user) throw new DomainError('PURCHASE_LIMIT');
+    if (this.purchases(id, c.id) >= c.max_per_user) throw new DomainError('PURCHASE_LIMIT');
     return c;
   }
   demoIdentities() {
@@ -148,18 +154,78 @@ export class Loopbox {
     if (!this.demo) throw new DomainError('DEMO_DISABLED', 403);
     if (!this.demoIdentities().some((u) => u.id === id)) throw new DomainError('DEMO_DISABLED', 403);
     this.user(id);
-    const token = randomUUID();
-    this.run('INSERT INTO sessions VALUES (?,?,?)', token, id, this.now() + 86400000);
+    return this.openSession(id);
+  }
+  /** Issues a random token; only its SHA-256 hash is stored. Also clears expired sessions. */
+  private openSession(userId: string) {
+    const token = randomBytes(32).toString('base64url');
+    this.run('DELETE FROM sessions WHERE expires_at<=?', this.now());
+    this.run(
+      'INSERT INTO sessions (token,user_id,expires_at,created_at) VALUES (?,?,?,?)',
+      hashToken(token),
+      userId,
+      this.now() + SESSION_TTL_MS,
+      this.now(),
+    );
     return token;
   }
   identity(token?: string) {
-    return token
-      ? (this.one<User>(
-          'SELECT u.id,u.name,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE token=? AND expires_at>?',
-          token,
-          this.now(),
-        ) ?? null)
-      : null;
+    if (!token || token.length > 200) return null;
+    return (
+      this.one<User>(
+        'SELECT u.id,u.name,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?',
+        hashToken(token),
+        this.now(),
+      ) ?? null
+    );
+  }
+  logout(token?: string) {
+    if (token) this.run('DELETE FROM sessions WHERE token=?', hashToken(token));
+  }
+  /** New collector account. Emails are unique and stored lower-case. */
+  signup(name: string, email: string, password: string) {
+    return this.transaction(() => {
+      if (this.one('SELECT 1 FROM users WHERE email=?', email))
+        throw new DomainError('EMAIL_TAKEN', 409);
+      const id = randomUUID();
+      this.run(
+        "INSERT INTO users (id,name,role,created_at,email,password_hash) VALUES (?,?,'COLLECTOR',?,?,?)",
+        id,
+        name,
+        this.now(),
+        email,
+        hashPassword(password),
+      );
+      this.audit(id, 'user.signup', 'user', id, {});
+      return { userId: id, token: this.openSession(id) };
+    });
+  }
+  /** Same error for unknown email and wrong password. Five failures lock the account 15 min. */
+  signin(email: string, password: string) {
+    const u = this.one<{ id: string; password_hash: string | null; failed_logins: number; locked_until: number | null }>(
+      'SELECT id,password_hash,failed_logins,locked_until FROM users WHERE email=?',
+      email,
+    );
+    const ok = verifyPassword(password, u?.password_hash);
+    if (u?.locked_until && u.locked_until > this.now()) throw new DomainError('ACCOUNT_LOCKED', 429);
+    if (!u || !ok) {
+      if (u)
+        this.transaction(() => {
+          const failures = u.failed_logins + 1;
+          this.run(
+            'UPDATE users SET failed_logins=?,locked_until=? WHERE id=?',
+            failures >= MAX_FAILED_LOGINS ? 0 : failures,
+            failures >= MAX_FAILED_LOGINS ? this.now() + LOCKOUT_MS : null,
+            u.id,
+          );
+          if (failures >= MAX_FAILED_LOGINS) this.audit(u.id, 'user.locked', 'user', u.id, {});
+        });
+      throw new DomainError('INVALID_CREDENTIALS', 401);
+    }
+    return this.transaction(() => {
+      this.run('UPDATE users SET failed_logins=0,locked_until=NULL WHERE id=?', u.id);
+      return { userId: u.id, token: this.openSession(u.id) };
+    });
   }
   /** Daily play limit per campaign. Demo mode allows 50 so rehearsals never lock anyone out. */
   attemptLimit(c: Campaign) {
@@ -198,9 +264,9 @@ export class Loopbox {
     );
     return accessId;
   }
-  startGame(id: string, mode: 'run' | 'lore') {
+  startGame(id: string, mode: 'run' | 'lore', campaignId = 'astral') {
     return this.transaction(() => {
-      const c = this.eligible(id);
+      const c = this.eligible(id, campaignId);
       this.checkAttempts(id, c);
       const recent = this.one<{ n: number }>(
         'SELECT COUNT(*) AS n FROM game_sessions WHERE user_id=? AND started_at>?',
@@ -213,7 +279,7 @@ export class Loopbox {
         'INSERT INTO game_sessions (id,user_id,campaign_id,mode,started_at,seed) VALUES (?,?,?,?,?,?)',
         session.id,
         id,
-        'astral',
+        c.id,
         mode,
         this.now(),
         session.seed,
@@ -223,13 +289,16 @@ export class Loopbox {
   }
   completeGame(id: string, sessionId: string, values: number[]) {
     return this.transaction(() => {
-      const c = this.eligible(id);
-      const g = this.one<GameSession>(
+      const g = this.one<GameSession & { campaign_id: string }>(
         'SELECT * FROM game_sessions WHERE id=? AND user_id=?',
         sessionId,
         id,
       );
-      if (!g) throw new DomainError('INVALID_SESSION', 403);
+      if (!g) {
+        this.collector(id);
+        throw new DomainError('INVALID_SESSION', 403);
+      }
+      const c = this.eligible(id, g.campaign_id);
       if (g.completed_at !== null) throw new DomainError('SESSION_ALREADY_USED');
       const elapsed = this.now() - g.started_at;
       if (elapsed > 3600000) throw new DomainError('SESSION_EXPIRED');
@@ -257,10 +326,10 @@ export class Loopbox {
     });
   }
   /** DEMO_MODE only: records a winning session exactly like a real win, without playing. */
-  demoWin(id: string) {
+  demoWin(id: string, campaignId = 'astral') {
     if (!this.demo) throw new DomainError('NOT_FOUND', 404);
     return this.transaction(() => {
-      const c = this.eligible(id);
+      const c = this.eligible(id, campaignId);
       this.checkAttempts(id, c);
       const gameId = randomUUID();
       this.run(
@@ -291,11 +360,11 @@ export class Loopbox {
   }
   /** Holds one seat: order PENDING_PAYMENT (counted by the capacity trigger), slot RESERVED. */
   private reserve(id: string, accessId: string) {
-    const c = this.eligible(id);
     const a = this.one<Access & { user_id: string; campaign_id: string }>(
       'SELECT * FROM access WHERE id=?',
       accessId,
     );
+    const c = this.eligible(id, a?.campaign_id ?? 'astral');
     if (!a || a.user_id !== id || a.campaign_id !== c.id)
       throw new DomainError('INVALID_ACCESS', 403);
     if (a.status !== 'AVAILABLE') throw new DomainError('ACCESS_ALREADY_USED');
@@ -667,8 +736,8 @@ export class Loopbox {
     this.run('UPDATE allocations SET revealed=1 WHERE id=?', a.id);
     return { ...a, revealed: 1 };
   }
-  trading() {
-    const c = this.campaign();
+  trading(campaignId = 'astral') {
+    const c = this.campaign(campaignId);
     if (
       !['ACTIVE_PREORDER', 'PREORDER_CLOSED', 'TRADE_WINDOW'].includes(c.phase) ||
       this.now() >= c.trade_ends_at
@@ -677,8 +746,8 @@ export class Loopbox {
   }
   listTrade(id: string, allocationId: string, wants: string[]) {
     return this.transaction(() => {
-      this.trading();
       const a = this.owned(id, allocationId);
+      this.trading(a.campaign_id);
       if (!a.revealed) throw new DomainError('OPEN_BOX_FIRST');
       if (!['OWNED', 'TRADE_LISTED'].includes(a.status))
         throw new DomainError('ALLOCATION_UNAVAILABLE');
@@ -748,8 +817,8 @@ export class Loopbox {
   }
   cancelListing(id: string, allocationId: string) {
     return this.transaction(() => {
-      this.trading();
       const a = this.owned(id, allocationId);
+      this.trading(a.campaign_id);
       if (a.status === 'TRADE_PENDING' || a.status === 'LOCKED_FOR_PRODUCTION')
         throw new DomainError('ALLOCATION_UNAVAILABLE');
       this.run('DELETE FROM preferences WHERE allocation_id=?', a.id);
@@ -759,14 +828,14 @@ export class Loopbox {
   }
   respond(id: string, matchId: string, accept: boolean) {
     return this.transaction(() => {
-      this.trading();
-      const m = this.one<Match>(
+      const m = this.one<Match & { campaign_id: string }>(
         'SELECT * FROM matches WHERE id=? AND (a_user=? OR b_user=?)',
         matchId,
         id,
         id,
       );
       if (!m) throw new DomainError('MATCH_NOT_FOUND', 404);
+      this.trading(m.campaign_id);
       if (m.status !== 'PENDING') throw new DomainError('MATCH_ALREADY_RESOLVED');
       if (!accept) {
         this.run("UPDATE matches SET status='DECLINED' WHERE id=?", m.id);
@@ -870,7 +939,10 @@ export class Loopbox {
           changes.attempts_per_day ?? c.attempts_per_day,
           c.id,
         );
-      this.all<{ id: string }>('SELECT id FROM characters ORDER BY rowid').forEach((ch, i) =>
+      this.all<{ id: string }>(
+        'SELECT id FROM characters WHERE campaign_id=? ORDER BY rowid',
+        c.id,
+      ).forEach((ch, i) =>
         this.run('UPDATE characters SET weight=? WHERE id=?', changes.weights[i], ch.id),
       );
       return { ok: true };
@@ -995,27 +1067,52 @@ export class Loopbox {
        FROM campaigns c LEFT JOIN partners p ON p.id=c.partner_id ORDER BY c.created_at DESC,c.id`,
     );
   }
-  snapshot(user: User | null): Snapshot {
+  /** Campaigns anyone can see: everything that has been published. */
+  publicCampaigns() {
+    return this.all<CampaignCard>(
+      `SELECT c.id,c.name,c.phase,c.price,c.capacity,c.starts_at,c.ends_at,c.trade_ends_at,p.name AS partner,p.type AS partner_type,
+        (SELECT COUNT(*) FROM orders WHERE campaign_id=c.id AND status IN ${ACTIVE}) AS confirmed
+       FROM campaigns c LEFT JOIN partners p ON p.id=c.partner_id
+       WHERE c.phase NOT IN ('DRAFT','IN_REVIEW','CANCELLED') ORDER BY c.created_at,c.id`,
+    );
+  }
+  /** Drafts and campaigns in review are visible only to their partner and to admins. */
+  visibleCampaign(user: User | null, campaignId: string) {
+    const c = this.campaign(campaignId);
+    if (['DRAFT', 'IN_REVIEW', 'CANCELLED'].includes(c.phase)) {
+      if (!user || (user.role !== 'ADMIN' && !this.isMember(user.id, c.id)))
+        throw new DomainError('NOT_FOUND', 404);
+    }
+    return c;
+  }
+  snapshot(user: User | null, campaignId = 'astral'): Snapshot {
     this.sweepExpired();
-    const c = this.campaign();
+    const c = this.visibleCampaign(user, campaignId);
     const id = user?.id ?? '';
     return {
       serverTime: this.now(),
       campaign: c,
+      campaigns: this.publicCampaigns(),
+      characters: this.all<CharacterInfo>(
+        'SELECT id,campaign_id,name,rarity,units,color,description FROM characters WHERE campaign_id=? OR campaign_id IN (SELECT campaign_id FROM allocations WHERE owner_id=?) ORDER BY rowid',
+        c.id,
+        id,
+      ),
       weights: this.all<{ weight: number }>(
         'SELECT weight FROM characters WHERE campaign_id=? ORDER BY rowid',
         c.id,
       ).map((row) => row.weight),
       user,
       demo: this.demo,
-      purchases: this.purchases(id),
+      purchases: this.purchases(id, c.id),
       access: this.all<Access>(
-        "SELECT id,expires_at,status FROM access WHERE user_id=? AND status='AVAILABLE' AND expires_at>?",
+        "SELECT id,expires_at,status FROM access WHERE user_id=? AND campaign_id=? AND status='AVAILABLE' AND expires_at>?",
         id,
+        c.id,
         this.now(),
       ),
       collection: this.all<Allocation>(
-        "SELECT a.id,CASE WHEN a.revealed=1 THEN a.character_id ELSE '' END AS character_id,a.owner_id,a.status,a.revealed,a.order_id,p.position FROM allocations a LEFT JOIN pool_units p ON p.id=a.pool_unit_id WHERE a.owner_id=? ORDER BY a.created_at DESC,a.id",
+        "SELECT a.id,a.campaign_id,CASE WHEN a.revealed=1 THEN a.character_id ELSE '' END AS character_id,a.owner_id,a.status,a.revealed,a.order_id,p.position FROM allocations a LEFT JOIN pool_units p ON p.id=a.pool_unit_id WHERE a.owner_id=? ORDER BY a.created_at DESC,a.id",
         id,
       ),
       matches: this.all<Match>(
@@ -1024,9 +1121,9 @@ export class Loopbox {
         id,
         id,
       ),
-      waitlisted: !!this.one('SELECT user_id FROM waitlist WHERE user_id=?', id),
+      waitlisted: !!this.one('SELECT user_id FROM waitlist WHERE user_id=? AND campaign_id=?', id, c.id),
       orders: this.all<OrderSummary>(
-        "SELECT o.id,o.status,o.created_at,a.id AS allocation_id,p.stripe_session_id AS session_id,p.expires_at FROM orders o LEFT JOIN allocations a ON a.order_id=o.id LEFT JOIN payments p ON p.kind='B2C' AND p.ref_id=o.id WHERE o.user_id=? ORDER BY o.created_at DESC LIMIT 10",
+        "SELECT o.id,o.campaign_id,o.status,o.created_at,a.id AS allocation_id,p.stripe_session_id AS session_id,p.expires_at FROM orders o LEFT JOIN allocations a ON a.order_id=o.id LEFT JOIN payments p ON p.kind='B2C' AND p.ref_id=o.id WHERE o.user_id=? ORDER BY o.created_at DESC LIMIT 10",
         id,
       ),
       payment: { mode: paymentMode(this.demo), simulate: simulateAllowed(this.demo) },
@@ -1034,6 +1131,12 @@ export class Loopbox {
       attemptLimit: this.attemptLimit(c),
       attemptsLeft: Math.max(0, this.attemptLimit(c) - this.attemptsUsed(id, c.id)),
     };
+  }
+  waitlist(id: string, campaignId = 'astral') {
+    this.collector(id);
+    const c = this.campaign(campaignId);
+    this.run('INSERT OR IGNORE INTO waitlist (user_id,campaign_id) VALUES (?,?)', id, c.id);
+    return { ok: true };
   }
   analytics(id: string, campaignId = 'astral'): Analytics {
     this.manager(id, campaignId);

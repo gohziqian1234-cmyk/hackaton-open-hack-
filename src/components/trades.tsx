@@ -3,11 +3,11 @@ import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Check, Repeat2, ShieldCheck } from 'lucide-react';
-import { useLoop } from './provider';
+import { kinOf, useLoop } from './provider';
 import { CollectorGate } from './collection';
 import { Pending } from './shell';
 import { KinArt } from './art';
-import { characters, phaseIndex } from '../lib/catalog';
+import { phaseIndex } from '../lib/catalog';
 import type { Match } from '../lib/types';
 import { Button, Empty, Tier } from './ui';
 export function Trades() {
@@ -23,12 +23,16 @@ export function Trades() {
   );
   const selected =
     available.find((a) => a.id === (selection || params.get('allocation'))) || available[0];
-  const ch = characters.find((c) => c.id === selected?.character_id),
-    alternatives = characters.filter((c) => c.rarity === ch?.rarity && c.id !== ch?.id);
+  const ch = kinOf(data, selected?.character_id),
+    alternatives = data.characters.filter(
+      (c) => c.campaign_id === selected?.campaign_id && c.rarity === ch?.rarity && c.id !== ch?.id,
+    );
+  const tradeCampaign =
+    data.campaigns.find((c) => c.id === (selected?.campaign_id ?? 'astral')) ?? data.campaign;
   const pending = data.matches.filter((m) => m.status === 'PENDING'),
     done = data.matches.filter((m) => m.status === 'ACCEPTED');
   const closed =
-    phaseIndex(data.campaign.phase) >= 4 || data.serverTime >= data.campaign.trade_ends_at;
+    phaseIndex(tradeCampaign.phase) >= 4 || data.serverTime >= tradeCampaign.trade_ends_at;
   return (
     <section className="wrap trades">
       <div className="page-heading">
@@ -50,7 +54,7 @@ export function Trades() {
               <Check size={24} aria-hidden="true" />
               <p>
                 <strong>Exchange complete.</strong> You now own{' '}
-                {characters.find((c) => c.id === (data.user?.id === m.a_user ? m.requested : m.offered))?.name}.
+                {kinOf(data, data.user?.id === m.a_user ? m.requested : m.offered)?.name}.
               </p>
               <Link className="btn btn-ghost" href="/collection">
                 See my updated collection
@@ -89,13 +93,13 @@ export function Trades() {
                 >
                   {available.map((a, i) => (
                     <option key={a.id} value={a.id}>
-                      {characters.find((c) => c.id === a.character_id)?.name}, box {i + 1}
+                      {kinOf(data, a.character_id)?.name}, box {i + 1}
                     </option>
                   ))}
                 </select>
                 {selected && ch && (
                   <div className="offer-preview">
-                    <KinArt id={selected.character_id} />
+                    <KinArt id={ch.id} name={ch.name} color={ch.color} />
                     <Tier rarity={ch.rarity} />
                     <p className="offer-name">{ch.name}</p>
                   </div>
@@ -119,7 +123,7 @@ export function Trades() {
                           )
                         }
                       />
-                      <KinArt id={c.id} />
+                      <KinArt id={c.id} name={c.name} color={c.color} />
                       <span>
                         <strong>{c.name}</strong>
                         <Tier rarity={c.rarity} />
@@ -170,7 +174,7 @@ export function Trades() {
                 )}
                 <p className="note">
                   Trading closes{' '}
-                  {new Date(data.campaign.trade_ends_at).toLocaleDateString('en-SG', {
+                  {new Date(tradeCampaign.trade_ends_at).toLocaleDateString('en-SG', {
                     day: 'numeric',
                     month: 'long',
                   })}
@@ -200,8 +204,8 @@ export function Trades() {
 function MatchCard({ match: m }: { match: Match }) {
   const { data, act, busy } = useLoop();
   const isA = data?.user?.id === m.a_user,
-    offered = characters.find((c) => c.id === (isA ? m.offered : m.requested)),
-    requested = characters.find((c) => c.id === (isA ? m.requested : m.offered));
+    offered = kinOf(data, isA ? m.offered : m.requested),
+    requested = kinOf(data, isA ? m.requested : m.offered);
   const accepted = isA ? m.a_accept : m.b_accept;
   const partner = m.partner.replace(' (demo)', '');
   return (
@@ -211,7 +215,7 @@ function MatchCard({ match: m }: { match: Match }) {
       <div className="match-cards">
         <div className="card mcard">
           <span className="mcard-label">You give</span>
-          <KinArt id={offered?.id} />
+          <KinArt id={offered?.id} name={offered?.name} color={offered?.color} />
           <h3>{offered?.name}</h3>
           {offered && <Tier rarity={offered.rarity} />}
         </div>
@@ -220,7 +224,7 @@ function MatchCard({ match: m }: { match: Match }) {
         </div>
         <div className="card mcard">
           <span className="mcard-label">{partner} gives</span>
-          <KinArt id={requested?.id} />
+          <KinArt id={requested?.id} name={requested?.name} color={requested?.color} />
           <h3>{requested?.name}</h3>
           {requested && <Tier rarity={requested.rarity} />}
         </div>

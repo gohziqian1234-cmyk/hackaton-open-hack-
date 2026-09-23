@@ -4,6 +4,26 @@ import { DomainError, Loopbox } from './service';
 
 export const SESSION_COOKIE = 'loopbox_session';
 
+/**
+ * HttpOnly, SameSite=Strict, 24 h. Secure whenever the request arrived over HTTPS (directly or
+ * through the host's TLS proxy), or always when COOKIE_SECURE=true. Plain-HTTP localhost demos
+ * keep working because browsers would drop a Secure cookie there.
+ */
+export function sessionCookie(request: Request) {
+  const https =
+    process.env.COOKIE_SECURE === 'true' ||
+    new URL(request.url).protocol === 'https:' ||
+    request.headers.get('x-forwarded-proto')?.split(',')[0].trim() === 'https';
+  return {
+    httpOnly: true,
+    sameSite: 'strict' as const,
+    secure: https,
+    path: '/',
+    maxAge: 86400,
+    priority: 'high' as const,
+  };
+}
+
 export const json = (data: unknown, status = 200, headers: Record<string, string> = {}) =>
   Response.json(data, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
 

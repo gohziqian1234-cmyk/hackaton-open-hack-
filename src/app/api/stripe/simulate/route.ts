@@ -1,6 +1,6 @@
-import { getDb } from '../../../../server/db';
+import { openService } from '../../../../server/app';
 import { assertSameOrigin, currentUser, failure, json } from '../../../../server/http';
-import { DomainError, Loopbox } from '../../../../server/service';
+import { DomainError } from '../../../../server/service';
 import { simulateAllowed } from '../../../../server/stripe';
 import { simulateSchema } from '../../../../server/validation';
 export const runtime = 'nodejs';
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 /** DEMO_MODE only: runs the real webhook handler with a synthetic "sim_" event. */
 export async function POST(request: Request) {
   try {
-    const service = new Loopbox(getDb());
+    const service = openService();
     if (!simulateAllowed(service.demo)) throw new DomainError('NOT_FOUND', 404);
     assertSameOrigin(request);
     const text = await request.text();

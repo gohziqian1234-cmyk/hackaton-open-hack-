@@ -945,6 +945,35 @@ select option {
   font-size: 15px;
 }
 
+.more-drops {
+  margin-bottom: var(--s8);
+}
+.drop-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--s4);
+  margin: var(--s5) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.drop-card {
+  display: grid;
+  gap: var(--s3);
+  align-content: start;
+  justify-items: start;
+}
+.drop-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s3);
+  align-items: center;
+}
+.partner-tag {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--moon-muted);
+}
+
 /* ==========================================================================
    Drop (Frame 2)
    ========================================================================== */

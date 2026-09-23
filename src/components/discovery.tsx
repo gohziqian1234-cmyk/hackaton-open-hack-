@@ -1,10 +1,10 @@
 'use client';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Stage } from './stage';
 import { KinArt } from './art';
-import { useLoop } from './provider';
-import { characters, sgd } from '../lib/catalog';
+import { useCampaign, useLoop } from './provider';
+import { phaseLabel, sgd } from '../lib/catalog';
 import { Pending } from './shell';
 import { Button, Perforation, Stat, Tier } from './ui';
 
@@ -17,7 +17,8 @@ const steps = [
 ];
 
 export function Discovery() {
-  const { data } = useLoop();
+  const data = useCampaign('astral');
+  const others = (data?.campaigns ?? []).filter((c) => c.id !== 'astral');
   const claimed = data?.campaign.confirmed ?? 93,
     cap = data?.campaign.capacity ?? 100,
     remaining = Math.max(0, cap - claimed);
@@ -61,6 +62,34 @@ export function Discovery() {
           {claimed}/{cap}
         </strong>
       </div>
+      {others.length > 0 && (
+        <section className="more-drops" aria-labelledby="more-heading">
+          <h2 id="more-heading">More drops</h2>
+          <ul className="drop-cards">
+            {others.map((c) => (
+              <li key={c.id} className="card drop-card">
+                <div className="drop-card-top">
+                  <span className={c.phase === 'ACTIVE_PREORDER' ? 'live' : 'live closed'}>
+                    {c.phase === 'ACTIVE_PREORDER' ? 'Live now' : phaseLabel(c.phase)}
+                  </span>
+                  {c.partner && (
+                    <span className="partner-tag">
+                      {c.partner_type === 'COLLECTIVE' ? 'Creator collective' : 'Brand'}: {c.partner}
+                    </span>
+                  )}
+                </div>
+                <h3>{c.name}</h3>
+                <p>
+                  {sgd(c.price)} a box. {c.confirmed} of {c.capacity} claimed.
+                </p>
+                <Button href={'/drop?campaign=' + c.id} variant="ghost">
+                  See the {c.name} drop
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section className="how" aria-labelledby="how-heading">
         <h2 id="how-heading">How a drop works</h2>
         <ol className="steps">
@@ -77,17 +106,27 @@ export function Discovery() {
 }
 
 export function Drop() {
-  const { data, login, busy, act } = useLoop(),
+  const campaignId = useSearchParams().get('campaign') || 'astral',
+    data = useCampaign(campaignId),
+    { login, busy, act } = useLoop(),
     router = useRouter();
   if (!data) return <Pending />;
+  const lineup = data.characters.filter((ch) => ch.campaign_id === data.campaign.id);
+  const query = campaignId === 'astral' ? '' : '?campaign=' + campaignId;
   const c = data.campaign,
     remaining = Math.max(0, c.capacity - c.confirmed),
     closed = c.phase !== 'ACTIVE_PREORDER' || data.serverTime >= c.ends_at,
     limit = data.purchases >= c.max_per_user,
     days = Math.max(0, Math.ceil((c.ends_at - data.serverTime) / 86400000));
   const enter = async () => {
-    if (!data.user || data.user.role !== 'COLLECTOR') await login('collector');
-    router.push(data.access.length ? '/checkout' : '/quest');
+    if (!data.user || data.user.role !== 'COLLECTOR') {
+      if (!data.demo) {
+        router.push('/login?next=' + encodeURIComponent('/drop' + query));
+        return;
+      }
+      await login('collector');
+    }
+    router.push((data.access.length ? '/checkout' : '/quest') + query);
   };
   return (
     <section className="wrap drop">
@@ -102,15 +141,11 @@ export function Drop() {
         <p className="lead">{c.description}</p>
         <h2 className="h3 lineup-title">The lineup. One box holds one kin, and you can’t pick which.</h2>
         <ul className="lineup">
-          {characters.map((ch) => {
+          {lineup.map((ch) => {
             const secret = ch.rarity === 'SECRET';
             return (
-              <li
-                key={ch.id}
-                className={'kin ' + ch.rarity.toLowerCase()}
-                style={{ '--kin-color': ch.color } as React.CSSProperties}
-              >
-                <KinArt id={ch.id} silhouette={secret} />
+              <li key={ch.id} className={'kin ' + ch.rarity.toLowerCase()}>
+                <KinArt id={ch.id} name={ch.name} color={ch.color} silhouette={secret} />
                 <h3>{secret ? 'Secret kin' : ch.name}</h3>
                 <Tier rarity={ch.rarity} />
                 <span className="odds">
@@ -122,9 +157,10 @@ export function Drop() {
         </ul>
         <p className="note drop-disclosure">
           Every box was shuffled before the drop opened and the fingerprint was published.{' '}
-          <Link href={'/verify/' + c.id}>Check the draw yourself</Link>. Demo note: the demo uses a
-          fixed shuffle, so the next box is always Eclipse Knight and the walkthrough is
-          repeatable. No real money is taken.
+          <Link href={'/verify/' + c.id}>Check the draw yourself</Link>.
+          {data.demo && c.id === 'astral' &&
+            ' Demo note: the demo uses a fixed shuffle, so the next box is always Eclipse Knight and the walkthrough is repeatable.'}{' '}
+          No real money is taken.
         </p>
       </div>
       <aside className="panel buy" aria-label="Buy a box">
@@ -144,7 +180,7 @@ export function Drop() {
             disabled={busy || data.waitlisted}
             onClick={async () => {
               if (!data.user) await login('collector');
-              await act({ action: 'waitlist' });
+              await act({ action: 'waitlist', campaignId: c.id });
             }}
           >
             {data.waitlisted ? 'You’re on the waitlist' : 'Sold out · Join waitlist'}

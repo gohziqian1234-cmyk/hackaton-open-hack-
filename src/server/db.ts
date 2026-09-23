@@ -5,6 +5,7 @@ import { characters } from '../lib/catalog';
 import { buildPool, commitment, newSeedHex, shuffle } from '../domain/fairness';
 import { migrate, pragmas, wipeAll } from './schema';
 import { DEMO_SEED_HEX, DEMO_SOLD } from './seed';
+import { seedPartnerDemo } from './demo-data';
 export function createDatabase(path: string) {
   if (path !== ':memory:') mkdirSync(dirname(resolve(path)), { recursive: true });
   const db = new DatabaseSync(path);
@@ -113,6 +114,7 @@ export function seed(db: DatabaseSync) {
         unitIds[n],
       );
     }
+    seedPartnerDemo(db, now);
     if (sarah >= 0 && sarah < DEMO_SOLD)
       db.prepare('INSERT INTO preferences (allocation_id,character_id) VALUES (?,?)').run(
         'sarah-aurora',

@@ -1,7 +1,7 @@
+import { openService } from '../../../../server/app';
 import type Stripe from 'stripe';
-import { getDb } from '../../../../server/db';
 import { failure, json } from '../../../../server/http';
-import { DomainError, Loopbox } from '../../../../server/service';
+import { DomainError } from '../../../../server/service';
 import { verifyWebhook } from '../../../../server/stripe';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     const event = verifyWebhook(raw, request.headers.get('stripe-signature'));
     if (!HANDLED.includes(event.type)) return json({ received: true, outcome: 'ignored' });
     const session = event.data.object as Stripe.Checkout.Session;
-    const result = await new Loopbox(getDb()).handlePaymentEvent({
+    const result = await openService().handlePaymentEvent({
       id: event.id,
       type: event.type,
       session: {
