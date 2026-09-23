@@ -229,4 +229,5 @@ export const marketQuerySchema = z.object({
   min: z.coerce.number().int().min(0).max(100000).optional(),
   max: z.coerce.number().int().min(0).max(100000).optional(),
   rarity: z.enum(['COMMON', 'RARE', 'SECRET']).optional(),
+  sort: z.enum(['new', 'price_asc', 'price_desc', 'stock', 'trust']).optional(),
 });

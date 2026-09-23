@@ -387,9 +387,10 @@ test('marketplace: Alex buys 2 boxes from Mei, Mei fulfils, Alex confirms, fee r
   page.on('pageerror', (e) => errors.push(e.message));
   await login(page, 'collector');
   await page.goto('/market');
-  await expect(
-    page.getByRole('heading', { name: 'Blind boxes, made by collectors.' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Marketplace', exact: true })).toBeVisible();
+  await expect(page.getByText('Payment held until you confirm delivery')).toBeVisible();
+  await page.getByLabel('Sort').selectOption('price_asc');
+  await expect(page).toHaveURL(/sort=price_asc/);
   await page.getByRole('link', { name: /Tropical Treats/ }).click();
   await expect(page.getByRole('heading', { name: 'Tropical Treats' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'What’s inside: stock and odds' })).toBeVisible();

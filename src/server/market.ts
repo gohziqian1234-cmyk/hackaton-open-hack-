@@ -341,7 +341,14 @@ export class Market extends Partners {
 
   // ---------- 8c. Browse ----------
   marketListings(
-    filters: { q?: string; theme?: string; min?: number; max?: number; rarity?: string } = {},
+    filters: {
+      q?: string;
+      theme?: string;
+      min?: number;
+      max?: number;
+      rarity?: string;
+      sort?: 'new' | 'price_asc' | 'price_desc' | 'stock' | 'trust';
+    } = {},
   ) {
     this.sweepMarketExpired();
     const where = ["l.status IN ('ACTIVE','SOLD_OUT')"],
@@ -379,13 +386,33 @@ export class Market extends Partners {
       left: number;
       photo: string | null;
       colors: string;
+      names: string;
+      declared: number;
+      characters: number;
+      rares: number;
+      fulfilment: string;
+      verified: number;
+      created_at: number;
     }>(
-      `SELECT l.id,l.title,l.theme,l.price_cents,l.status,u.name AS seller,u.trust_score AS trust,
+      `SELECT l.id,l.title,l.theme,l.price_cents,l.status,l.fulfilment,l.created_at,u.name AS seller,u.trust_score AS trust,
+        (u.email_verified_at IS NOT NULL AND u.phone_verified_at IS NOT NULL) AS verified,
         (SELECT COALESCE(SUM(remaining),0) FROM listing_characters WHERE listing_id=l.id) AS left,
+        (SELECT COALESCE(SUM(declared),0) FROM listing_characters WHERE listing_id=l.id) AS declared,
+        (SELECT COUNT(*) FROM listing_characters WHERE listing_id=l.id) AS characters,
+        (SELECT COUNT(*) FROM listing_characters WHERE listing_id=l.id AND rarity<>'COMMON') AS rares,
         (SELECT id FROM listing_photos WHERE listing_id=l.id ORDER BY created_at LIMIT 1) AS photo,
-        (SELECT group_concat(color) FROM (SELECT color FROM listing_characters WHERE listing_id=l.id ORDER BY position)) AS colors
+        (SELECT group_concat(color) FROM (SELECT color FROM listing_characters WHERE listing_id=l.id ORDER BY position)) AS colors,
+        (SELECT group_concat(name,'|') FROM (SELECT name FROM listing_characters WHERE listing_id=l.id ORDER BY position)) AS names
        FROM listings l JOIN users u ON u.id=l.seller_id WHERE ${where.join(' AND ')}
-       ORDER BY l.status='SOLD_OUT',l.created_at DESC LIMIT 60`,
+       ORDER BY l.status='SOLD_OUT',${
+         {
+           new: 'l.created_at DESC',
+           price_asc: 'l.price_cents ASC,l.created_at DESC',
+           price_desc: 'l.price_cents DESC,l.created_at DESC',
+           stock: 'left DESC,l.created_at DESC',
+           trust: 'u.trust_score DESC,l.created_at DESC',
+         }[filters.sort ?? 'new']
+       } LIMIT 60`,
       ...args,
     );
     const themes = this.all<{ theme: string }>(
@@ -406,8 +433,9 @@ export class Market extends Partners {
       status: string;
       seller: string;
       trust: number;
+      verified: number;
     }>(
-      'SELECT l.*,u.name AS seller,u.trust_score AS trust FROM listings l JOIN users u ON u.id=l.seller_id WHERE l.id=?',
+      'SELECT l.*,u.name AS seller,u.trust_score AS trust,(u.email_verified_at IS NOT NULL AND u.phone_verified_at IS NOT NULL) AS verified FROM listings l JOIN users u ON u.id=l.seller_id WHERE l.id=?',
       listingId,
     );
     const admin = userId ? this.user(userId).role === 'ADMIN' : false;
