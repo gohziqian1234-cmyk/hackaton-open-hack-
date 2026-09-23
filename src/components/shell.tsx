@@ -41,7 +41,9 @@ function Frame({ children }: { children: React.ReactNode }) {
     router = useRouter(),
     { data, login } = useLoop(),
     [menu, setMenu] = useState(false);
-  const business = data?.user?.role === 'BUSINESS';
+  const role = data?.user?.role,
+    business = role === 'BUSINESS',
+    admin = role === 'ADMIN';
   return (
     <>
       <a className="skip-link" href="#content">
@@ -67,14 +69,17 @@ function Frame({ children }: { children: React.ReactNode }) {
           </nav>
           <div className="site-header-end">
             <button
-              className={business ? 'who business' : 'who'}
+              className={admin ? 'who admin' : business ? 'who business' : 'who'}
               onClick={async () => {
-                await login(business ? 'collector' : 'business');
-                router.push(business ? '/drop' : '/studio');
+                const toStudio = !business && !admin;
+                await login(toStudio ? 'business' : 'collector');
+                router.push(toStudio ? '/studio' : '/drop');
               }}
             >
-              <b aria-hidden="true">{business ? 'AS' : 'A'}</b>
-              <span className="who-label">{business ? 'Demo studio' : 'Demo collector'}</span>
+              <b aria-hidden="true">{admin ? 'AD' : business ? 'AS' : 'A'}</b>
+              <span className="who-label">
+                {admin ? 'Demo admin' : business ? 'Demo studio' : 'Demo collector'}
+              </span>
               <span className="visually-hidden">, switch workspace</span>
             </button>
             <button

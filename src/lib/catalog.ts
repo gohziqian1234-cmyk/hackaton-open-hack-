@@ -67,7 +67,24 @@ export const phases = [
   'SHIPPING',
   'COMPLETED',
 ] as const;
-export type Phase = (typeof phases)[number];
+/** Phases before a campaign goes live, and the cancelled end state. */
+export type Phase = (typeof phases)[number] | 'DRAFT' | 'IN_REVIEW' | 'CANCELLED';
+/** Position in the live lifecycle, or -1 for DRAFT, IN_REVIEW and CANCELLED. */
+export const phaseIndex = (phase: string) => (phases as readonly string[]).indexOf(phase);
+const phaseNames: Record<string, string> = {
+  DRAFT: 'Draft',
+  IN_REVIEW: 'In review',
+  CANCELLED: 'Cancelled',
+  UPCOMING: 'Upcoming',
+  ACTIVE_PREORDER: 'Preorder open',
+  PREORDER_CLOSED: 'Preorder closed',
+  TRADE_WINDOW: 'Trade window',
+  ALLOCATION_LOCKED: 'Allocation locked',
+  IN_PRODUCTION: 'In production',
+  SHIPPING: 'Shipping',
+  COMPLETED: 'Completed',
+};
+export const phaseLabel = (phase: string) => phaseNames[phase] ?? phase;
 export const questConfig = {
   title: 'The fragment run',
   duration: 30,

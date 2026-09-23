@@ -2306,7 +2306,59 @@ select option {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: var(--s3);
 }
+.console-section {
+  display: grid;
+  gap: var(--s4);
+  margin-bottom: var(--s4);
+}
+.console-section.sweep {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s3);
+}
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-weight: 600;
+  color: var(--moon-muted);
+}
+.inline-field select {
+  width: auto;
+  min-width: 180px;
+}
+.cell-sub {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--moon-muted);
+}
+.table-actions {
+  flex-wrap: nowrap;
+}
+.table-actions .btn {
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.table-actions .btn-primary {
+  margin-bottom: 5px;
+}
+code {
+  font: 600 14px/1.4 ui-monospace, Menlo, Consolas, monospace;
+  color: var(--moon);
+}
 @media (max-width: 900px) {
+  .console-section.sweep {
+    grid-template-columns: 1fr;
+  }
   .studio-grid {
     grid-template-columns: 1fr;
   }

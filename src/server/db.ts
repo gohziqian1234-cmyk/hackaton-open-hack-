@@ -32,6 +32,7 @@ export function seed(db: DatabaseSync) {
     const u = db.prepare('INSERT INTO users (id,name,role,created_at) VALUES (?,?,?,?)');
     u.run('collector', 'Alex', 'COLLECTOR', now);
     u.run('business', 'Astral Studio', 'BUSINESS', now);
+    u.run('admin', 'Admin', 'ADMIN', now);
     for (let i = 0; i < 16; i++)
       u.run(
         'demo-' + i,
@@ -39,11 +40,18 @@ export function seed(db: DatabaseSync) {
         'COLLECTOR',
         now,
       );
+    db.prepare(
+      'INSERT INTO partners (id,name,type,owner_user_id,created_at) VALUES (?,?,?,?,?)',
+    ).run('studio', 'Astral Studio', 'BRAND', 'business', now);
+    db.prepare(
+      'INSERT INTO partner_members (partner_id,user_id,role,created_at) VALUES (?,?,?,?)',
+    ).run('studio', 'business', 'OWNER', now);
     const startsAt = now - 86400000;
     db.prepare(
-      'INSERT INTO campaigns (id,business_id,name,description,price,capacity,max_per_user,phase,starts_at,ends_at,trade_ends_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO campaigns (id,business_id,partner_id,name,description,price,capacity,max_per_user,phase,starts_at,ends_at,trade_ends_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
     ).run(
       'astral',
+      'studio',
       'studio',
       'Astral Kin',
       'Seven guardians from the edge of the map. Four common, two rare and one secret. Made only when you choose to bring them home.',
@@ -54,6 +62,7 @@ export function seed(db: DatabaseSync) {
       startsAt,
       now + 7 * 86400000,
       now + 10 * 86400000,
+      startsAt - 86400000,
     );
     const c = db.prepare(
       'INSERT INTO characters (id,campaign_id,name,rarity,weight,units,color,description) VALUES (?,?,?,?,?,?,?,?)',

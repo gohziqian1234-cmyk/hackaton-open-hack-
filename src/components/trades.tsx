@@ -7,7 +7,7 @@ import { useLoop } from './provider';
 import { CollectorGate } from './collection';
 import { Pending } from './shell';
 import { KinArt } from './art';
-import { characters, phases } from '../lib/catalog';
+import { characters, phaseIndex } from '../lib/catalog';
 import type { Match } from '../lib/types';
 import { Button, Empty, Tier } from './ui';
 export function Trades() {
@@ -28,7 +28,7 @@ export function Trades() {
   const pending = data.matches.filter((m) => m.status === 'PENDING'),
     done = data.matches.filter((m) => m.status === 'ACCEPTED');
   const closed =
-    phases.indexOf(data.campaign.phase) >= 4 || data.serverTime >= data.campaign.trade_ends_at;
+    phaseIndex(data.campaign.phase) >= 4 || data.serverTime >= data.campaign.trade_ends_at;
   return (
     <section className="wrap trades">
       <div className="page-heading">

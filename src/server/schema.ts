@@ -172,6 +172,50 @@ CREATE INDEX IF NOT EXISTS audit_entity ON audit_log(entity,created_at);`);
       createGuards(db, ['audit_no_update', 'audit_no_delete']);
     },
   },
+  {
+    id: 5,
+    name: 'M6 admin role, partners, campaign lifecycle phases',
+    up: (db) => {
+      const now = Date.now();
+      // Triggers that reference campaigns must not exist while the table is rebuilt.
+      db.exec(`
+DROP TRIGGER IF EXISTS capacity_guard;
+DROP TRIGGER IF EXISTS capacity_guard_revive;
+CREATE TABLE users_v5(id TEXT PRIMARY KEY,name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 80),role TEXT NOT NULL CHECK(role IN ('COLLECTOR','BUSINESS','ADMIN')),created_at INTEGER NOT NULL,email TEXT UNIQUE,email_verified_at INTEGER,phone TEXT,phone_verified_at INTEGER,age_confirmed_at INTEGER,trust_score INTEGER NOT NULL DEFAULT 100 CHECK(trust_score BETWEEN 0 AND 100));
+INSERT INTO users_v5 (id,name,role,created_at,age_confirmed_at) SELECT id,name,role,created_at,age_confirmed_at FROM users;
+DROP TABLE users;
+ALTER TABLE users_v5 RENAME TO users;
+CREATE TABLE IF NOT EXISTS partners(id TEXT PRIMARY KEY,name TEXT NOT NULL CHECK(length(name) BETWEEN 2 AND 80),type TEXT NOT NULL CHECK(type IN ('BRAND','COLLECTIVE')),owner_user_id TEXT NOT NULL REFERENCES users(id),created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS partner_members(partner_id TEXT NOT NULL REFERENCES partners(id),user_id TEXT NOT NULL REFERENCES users(id),role TEXT NOT NULL CHECK(role IN ('OWNER','MEMBER')),created_at INTEGER NOT NULL,PRIMARY KEY(partner_id,user_id));
+CREATE INDEX IF NOT EXISTS partner_members_user ON partner_members(user_id);
+CREATE TABLE campaigns_v5(id TEXT PRIMARY KEY,business_id TEXT REFERENCES businesses(id),partner_id TEXT REFERENCES partners(id),name TEXT NOT NULL,description TEXT NOT NULL,price INTEGER NOT NULL CHECK(price>0),capacity INTEGER NOT NULL CHECK(capacity>0),max_per_user INTEGER NOT NULL CHECK(max_per_user>0),phase TEXT NOT NULL CHECK(phase IN ('DRAFT','IN_REVIEW','UPCOMING','ACTIVE_PREORDER','PREORDER_CLOSED','TRADE_WINDOW','ALLOCATION_LOCKED','IN_PRODUCTION','SHIPPING','COMPLETED','CANCELLED')),starts_at INTEGER NOT NULL,ends_at INTEGER NOT NULL,trade_ends_at INTEGER NOT NULL,required_score INTEGER NOT NULL DEFAULT 10 CHECK(required_score BETWEEN 1 AND 15),attempts_per_day INTEGER NOT NULL DEFAULT 5 CHECK(attempts_per_day BETWEEN 1 AND 20),game_mode TEXT NOT NULL DEFAULT 'run' CHECK(game_mode IN ('run','lore')),revenue_share_bps INTEGER NOT NULL DEFAULT 3000 CHECK(revenue_share_bps BETWEEN 0 AND 10000),created_at INTEGER NOT NULL DEFAULT 0);
+INSERT INTO campaigns_v5 (id,business_id,name,description,price,capacity,max_per_user,phase,starts_at,ends_at,trade_ends_at,required_score,attempts_per_day,game_mode) SELECT id,business_id,name,description,price,capacity,max_per_user,phase,starts_at,ends_at,trade_ends_at,required_score,attempts_per_day,game_mode FROM campaigns;
+DROP TABLE campaigns;
+ALTER TABLE campaigns_v5 RENAME TO campaigns;
+CREATE TRIGGER capacity_guard BEFORE INSERT ON orders WHEN NEW.status IN ('PENDING_PAYMENT','PAID','DEMO_PAID') BEGIN SELECT CASE WHEN (SELECT COUNT(*) FROM orders WHERE campaign_id=NEW.campaign_id AND status IN ('PENDING_PAYMENT','PAID','DEMO_PAID'))>=(SELECT capacity FROM campaigns WHERE id=NEW.campaign_id) THEN RAISE(ABORT,'SOLD_OUT') END; END;
+CREATE TRIGGER capacity_guard_revive BEFORE UPDATE OF status ON orders WHEN NEW.status IN ('PENDING_PAYMENT','PAID','DEMO_PAID') AND OLD.status NOT IN ('PENDING_PAYMENT','PAID','DEMO_PAID') BEGIN SELECT CASE WHEN (SELECT COUNT(*) FROM orders WHERE campaign_id=NEW.campaign_id AND status IN ('PENDING_PAYMENT','PAID','DEMO_PAID'))>=(SELECT capacity FROM campaigns WHERE id=NEW.campaign_id) THEN RAISE(ABORT,'SOLD_OUT') END; END;`);
+      // Each v1 business becomes a Brand partner owned by its business user.
+      const owner = db.prepare("SELECT id FROM users WHERE role='BUSINESS' ORDER BY created_at,id LIMIT 1").get() as
+        | { id: string }
+        | undefined;
+      if (owner)
+        for (const b of db.prepare('SELECT id,name FROM businesses').all() as { id: string; name: string }[]) {
+          db.prepare('INSERT OR IGNORE INTO partners (id,name,type,owner_user_id,created_at) VALUES (?,?,?,?,?)').run(
+            b.id,
+            b.name,
+            'BRAND',
+            owner.id,
+            now,
+          );
+          db.prepare(
+            'INSERT OR IGNORE INTO partner_members (partner_id,user_id,role,created_at) VALUES (?,?,?,?)',
+          ).run(b.id, owner.id, 'OWNER', now);
+          db.prepare('UPDATE campaigns SET partner_id=? WHERE business_id=?').run(b.id, b.id);
+        }
+      if (db.prepare("SELECT 1 FROM users WHERE id='collector'").get())
+        db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('admin','Admin','ADMIN',?)").run(now);
+    },
+  },
 ];
 
 export function migrate(db: DatabaseSync) {

@@ -24,7 +24,9 @@ describe('forward-only migrations', () => {
               (c) => c.name === name,
             ),
           );
-        const rows = v1.prepare(`SELECT ${cols.join(',')} FROM ${table}`).all();
+        // v1 only knew collectors and businesses.
+        const where = table === 'users' ? " WHERE role IN ('COLLECTOR','BUSINESS')" : '';
+        const rows = v1.prepare(`SELECT ${cols.join(',')} FROM ${table}${where}`).all();
         const insert = old.prepare(
           `INSERT INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,
         );
@@ -44,6 +46,10 @@ describe('forward-only migrations', () => {
         required_score: 10,
       });
       expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+      expect(db.prepare("SELECT role FROM users WHERE id='admin'").get()).toEqual({ role: 'ADMIN' });
+      expect(db.prepare("SELECT partner_id FROM campaigns WHERE id='astral'").get()).toEqual({
+        partner_id: 'studio',
+      });
       db.close();
       // Re-opening is a no-op.
       createDatabase(file).close();

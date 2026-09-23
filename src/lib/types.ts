@@ -18,7 +18,7 @@ export interface Campaign {
 export interface User {
   id: string;
   name: string;
-  role: 'COLLECTOR' | 'BUSINESS';
+  role: 'COLLECTOR' | 'BUSINESS' | 'ADMIN';
 }
 export interface Allocation {
   id: string;
@@ -62,6 +62,28 @@ export interface Snapshot {
   attemptsLeft: number;
   orders: OrderSummary[];
   payment: { mode: 'stripe' | 'simulated' | 'unavailable'; simulate: boolean };
+  identities: { id: string; name: string; role: string }[];
+}
+export interface AuditRow {
+  id: string;
+  actor_id: string | null;
+  action: string;
+  entity: string;
+  entity_id: string;
+  detail: string;
+  created_at: number;
+}
+export interface AdminCampaign {
+  id: string;
+  name: string;
+  phase: string;
+  capacity: number;
+  price: number;
+  starts_at: number;
+  partner: string | null;
+  paid: number;
+  pending: number;
+  pool: number;
 }
 export interface OrderSummary {
   id: string;

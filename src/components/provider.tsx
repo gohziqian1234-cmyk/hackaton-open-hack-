@@ -25,6 +25,10 @@ const messages: Record<string, string> = {
   ALREADY_DONE: 'That payment was already processed.',
   RATE_LIMITED: 'You’re going a little fast. Wait a moment and try again.',
   INVALID_ACCESS: 'That slot belongs to someone else or has already been used.',
+  FORBIDDEN: 'Your account can’t do that.',
+  INVALID_STATE: 'That step isn’t possible in the campaign’s current phase.',
+  VALIDATION_FAILED: 'Some details don’t add up. Check the numbers and try again.',
+  NOT_FOUND: 'We couldn’t find that.',
 };
 export async function api<T>(data?: unknown, url = '/api/loopbox'): Promise<T> {
   const r = await fetch(url, {
@@ -48,7 +52,7 @@ type Context = {
   busy: boolean;
   error: string;
   act: <T>(body: unknown, url?: string) => Promise<T | undefined>;
-  login: (user: 'collector' | 'business' | 'demo-0') => Promise<void>;
+  login: (user: string) => Promise<void>;
 };
 const Store = createContext<Context | null>(null);
 export function Provider({ children }: { children: React.ReactNode }) {
@@ -90,7 +94,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
     },
     [refresh],
   );
-  const login = async (user: 'collector' | 'business' | 'demo-0') => {
+  const login = async (user: string) => {
     await act({ action: 'login', user });
   };
   return (

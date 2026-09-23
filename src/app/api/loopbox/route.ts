@@ -65,7 +65,13 @@ export async function POST(request: Request) {
       case 'respond':
         return response(service.respond(user.id, data.matchId, data.accept));
       case 'advance':
-        return response(service.advance(user.id));
+        return response(service.advance(user.id, data.campaignId));
+      case 'publishCampaign':
+        return response(service.publishCampaign(user.id, data.campaignId));
+      case 'closeCampaign':
+        return response(service.closeCampaign(user.id, data.campaignId));
+      case 'sweep':
+        return response(service.sweep(user.id));
       case 'edit':
         return response(service.edit(user.id, data.changes));
       case 'waitlist':

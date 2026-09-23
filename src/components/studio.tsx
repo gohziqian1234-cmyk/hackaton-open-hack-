@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Download, Factory, RefreshCw, Settings2, X } from 'lucide-react';
 import { useLoop } from './provider';
 import { Loading, Pending } from './shell';
-import { characters, phases, sgd } from '../lib/catalog';
+import { characters, phaseIndex, phaseLabel, phases, sgd } from '../lib/catalog';
 import { percent, sellThrough } from '../domain/metrics';
 import { Button, Empty, ErrorNote, Stat } from './ui';
+import { AdminConsole } from './admin';
 import type { Analytics, Campaign } from '../lib/types';
 export function Studio() {
   const { data, login, act, busy } = useLoop(),
@@ -14,8 +15,9 @@ export function Studio() {
     [version, setVersion] = useState(0);
   const edit = useRef<HTMLDialogElement>(null),
     advance = useRef<HTMLDialogElement>(null);
+  const role = data?.user?.role;
   useEffect(() => {
-    if (data?.user?.role !== 'BUSINESS') return;
+    if (role !== 'BUSINESS') return;
     fetch('/api/loopbox?analytics=1', { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) throw new Error('Studio data is unavailable. Please retry.');
@@ -26,9 +28,10 @@ export function Studio() {
         setAnalytics(a);
       })
       .catch((e) => setFetchError(e.message));
-  }, [data, version]);
+  }, [data, role, version]);
   if (!data) return <Pending />;
-  if (data.user?.role !== 'BUSINESS')
+  if (role === 'ADMIN') return <AdminConsole />;
+  if (role !== 'BUSINESS')
     return (
       <section className="wrap page-pad">
         <Empty
@@ -61,7 +64,7 @@ export function Studio() {
       <Loading />
     );
   const c = data.campaign,
-    index = phases.indexOf(c.phase),
+    index = phaseIndex(c.phase),
     locked = index >= 4,
     next = phases[index + 1],
     peak = Math.max(1, ...analytics.distribution.map((d) => d.quantity));
@@ -116,13 +119,18 @@ export function Studio() {
                 {locked ? 'Ready to make.' : 'What we would make today.'}
               </h2>
             </div>
-            <button
-              className="icon-btn"
-              aria-label="Download production CSV"
-              onClick={() => exportPlan(analytics, c, locked)}
-            >
-              <Download size={18} />
-            </button>
+            <div className="row">
+              <button
+                className="icon-btn"
+                aria-label="Download production CSV"
+                onClick={() => exportPlan(analytics, c, locked)}
+              >
+                <Download size={18} />
+              </button>
+              <a className="btn btn-ghost" href={'/api/manifest?campaign=' + c.id} download>
+                Download manifest
+              </a>
+            </div>
           </div>
           <div className="table-scroll">
             <table className="data-table">
@@ -270,17 +278,6 @@ export function Studio() {
     </section>
   );
 }
-const phaseNames: Record<string, string> = {
-  UPCOMING: 'Upcoming',
-  ACTIVE_PREORDER: 'Preorder open',
-  PREORDER_CLOSED: 'Preorder closed',
-  TRADE_WINDOW: 'Trade window',
-  ALLOCATION_LOCKED: 'Allocation locked',
-  IN_PRODUCTION: 'In production',
-  SHIPPING: 'Shipping',
-  COMPLETED: 'Completed',
-};
-export const phaseLabel = (phase: string) => phaseNames[phase] ?? phase;
 const tierLabel = (rarity: string) => rarity.charAt(0) + rarity.slice(1).toLowerCase();
 function CampaignForm({
   campaign: c,

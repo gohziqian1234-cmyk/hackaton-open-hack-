@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { createDatabase, seed } from '../../src/server/db';
 import { DomainError, Loopbox } from '../../src/server/service';
 import { resolve } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 const screenshotDir = resolve('../../work/qa');
 test.beforeEach(() => {
   mkdirSync(screenshotDir, { recursive: true });
@@ -93,6 +93,12 @@ test('golden path: quest, preorder, reveal, direct trade, final production', asy
   }
   await expect(page.getByRole('heading', { name: 'Ready to make.' })).toBeVisible();
   await page.screenshot({ path: resolve(screenshotDir, '07-studio.png'), fullPage: true });
+  const manifestDownload = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Download manifest' }).click();
+  const manifest = await manifestDownload;
+  expect(manifest.suggestedFilename()).toMatch(/^manifest-astral-\d{8}\.csv$/);
+  const manifestRows = readFileSync(await manifest.path(), 'utf8').trim().split('\r\n');
+  expect(manifestRows.at(-1)).toBe('astral,TOTAL,,,94');
   await page.goto('/verify/astral');
   await expect(page.getByText('Fingerprints match')).toBeVisible();
   await page.screenshot({ path: resolve(screenshotDir, '08-verify.png'), fullPage: true });

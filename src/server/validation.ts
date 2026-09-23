@@ -1,7 +1,8 @@
 import { z } from 'zod';
 const id = z.string().min(1).max(100);
+const slug = z.string().regex(/^[a-z0-9-]{1,64}$/);
 export const actionSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('login'), user: z.enum(['collector', 'business', 'demo-0']) }),
+  z.object({ action: z.literal('login'), user: z.string().regex(/^[a-z0-9-]{1,40}$/) }),
   z.object({ action: z.literal('start'), mode: z.enum(['run', 'lore']) }),
   z.object({ action: z.literal('demoWin') }),
   z.object({
@@ -16,7 +17,10 @@ export const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('trade'), allocationId: id, wants: z.array(id).min(1).max(6) }),
   z.object({ action: z.literal('keep'), allocationId: id }),
   z.object({ action: z.literal('respond'), matchId: id, accept: z.boolean() }),
-  z.object({ action: z.literal('advance') }),
+  z.object({ action: z.literal('advance'), campaignId: slug.optional() }),
+  z.object({ action: z.literal('publishCampaign'), campaignId: slug }),
+  z.object({ action: z.literal('closeCampaign'), campaignId: slug }),
+  z.object({ action: z.literal('sweep') }),
   z.object({ action: z.literal('waitlist') }),
   z.object({
     action: z.literal('edit'),

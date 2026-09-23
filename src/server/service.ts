@@ -1,10 +1,10 @@
 import { randomUUID, randomInt } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
-import { lore, phases, questConfig } from '../lib/catalog';
+import { lore, phaseIndex, phases, questConfig } from '../lib/catalog';
 import { scoreRun } from '../lib/game';
 import { startOfSgtDay } from '../domain/time';
 import { winRate } from '../domain/metrics';
-import { buildPool, commitment, shuffle, verify } from '../domain/fairness';
+import { buildPool, commitment, newSeedHex, shuffle, verify } from '../domain/fairness';
 import { DEMO_SEED_HEX } from './seed';
 import {
   SESSION_MINUTES,
@@ -24,6 +24,8 @@ import type {
   Analytics,
   Verification,
   OrderSummary,
+  AuditRow,
+  AdminCampaign,
 } from '../lib/types';
 
 import { DomainError } from './errors';
@@ -38,6 +40,12 @@ export type PaymentSession = {
   metadata?: Record<string, string> | null;
 };
 export type PaymentEvent = { id: string; type: string; session: PaymentSession };
+/** CSV cell: quoted, and neutralised if a spreadsheet could read it as a formula. */
+export function csvCell(value: string | number) {
+  let text = String(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
+  return /[",\r\n']/.test(text) ? '"' + text.replaceAll('"', '""') + '"' : text;
+}
 type GameSession = {
   id: string;
   user_id: string;
@@ -72,11 +80,33 @@ export class Loopbox {
       throw e;
     }
   }
-  campaign() {
-    return this.one<Campaign>(
+  campaign(campaignId = 'astral') {
+    const c = this.one<Campaign>(
       `SELECT c.*, (SELECT COUNT(*) FROM orders WHERE campaign_id=c.id AND status IN ${ACTIVE}) AS confirmed FROM campaigns c WHERE id=?`,
-      'astral',
-    )!;
+      campaignId,
+    );
+    if (!c) throw new DomainError('NOT_FOUND', 404);
+    return c;
+  }
+  admin(id: string) {
+    const u = this.user(id);
+    if (u.role !== 'ADMIN') throw new DomainError('FORBIDDEN', 403);
+    return u;
+  }
+  isMember(userId: string, campaignId: string) {
+    return !!this.one(
+      'SELECT 1 FROM campaigns c JOIN partner_members m ON m.partner_id=c.partner_id WHERE c.id=? AND m.user_id=?',
+      campaignId,
+      userId,
+    );
+  }
+  /** ADMIN, or a BUSINESS member of the partner that owns this campaign. */
+  manager(id: string, campaignId: string) {
+    const u = this.user(id);
+    if (u.role === 'ADMIN') return u;
+    if (u.role !== 'BUSINESS') throw new DomainError('BUSINESS_ONLY', 403);
+    if (!this.isMember(id, campaignId)) throw new DomainError('FORBIDDEN', 403);
+    return u;
   }
   user(id: string) {
     const user = this.one<User>('SELECT id,name,role FROM users WHERE id=?', id);
@@ -105,8 +135,18 @@ export class Loopbox {
     if (this.purchases(id) >= c.max_per_user) throw new DomainError('PURCHASE_LIMIT');
     return c;
   }
-  login(id: 'collector' | 'business' | 'demo-0') {
+  demoIdentities() {
+    if (!this.demo) return [];
+    const ids = ['collector', 'business', 'demo-0'];
+    if (process.env.ADMIN_DEMO !== 'false') ids.push('admin');
+    return this.all<{ id: string; name: string; role: string }>(
+      `SELECT id,name,role FROM users WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY rowid`,
+      ...ids,
+    );
+  }
+  login(id: string) {
     if (!this.demo) throw new DomainError('DEMO_DISABLED', 403);
+    if (!this.demoIdentities().some((u) => u.id === id)) throw new DomainError('DEMO_DISABLED', 403);
     this.user(id);
     const token = randomUUID();
     this.run('INSERT INTO sessions VALUES (?,?,?)', token, id, this.now() + 86400000);
@@ -663,6 +703,22 @@ export class Loopbox {
       for (const want of new Set(wants))
         this.run('INSERT INTO preferences VALUES (?,?)', a.id, want);
       this.run("UPDATE allocations SET status='TRADE_LISTED' WHERE id=?", a.id);
+      return this.matchListing(a.id);
+    });
+  }
+  /** 2-way reciprocal, same campaign and tier, FIFO by listing age. Caller holds the txn. */
+  private matchListing(allocationId: string) {
+    const a = this.one<Allocation & { campaign_id: string }>(
+      'SELECT * FROM allocations WHERE id=?',
+      allocationId,
+    );
+    if (!a || a.status !== 'TRADE_LISTED') return { matched: false };
+    const id = a.owner_id;
+    const source = this.one<{ rarity: string; campaign_id: string }>(
+      'SELECT * FROM characters WHERE id=?',
+      a.character_id,
+    )!;
+    {
       const partner = this.one<Allocation>(
         `SELECT b.* FROM allocations b JOIN characters cb ON cb.id=b.character_id WHERE b.owner_id<>? AND b.campaign_id=? AND b.status='TRADE_LISTED' AND b.revealed=1 AND cb.rarity=? AND EXISTS(SELECT 1 FROM preferences WHERE allocation_id=? AND character_id=b.character_id) AND EXISTS(SELECT 1 FROM preferences WHERE allocation_id=b.id AND character_id=?) ORDER BY b.created_at,b.id LIMIT 1`,
         id,
@@ -688,7 +744,7 @@ export class Loopbox {
       );
       this.run("UPDATE allocations SET status='TRADE_PENDING' WHERE id IN (?,?)", a.id, partner.id);
       return { matched: true, matchId };
-    });
+    }
   }
   cancelListing(id: string, allocationId: string) {
     return this.transaction(() => {
@@ -732,17 +788,21 @@ export class Loopbox {
         this.run("UPDATE allocations SET owner_id=?,status='OWNED' WHERE id=?", m.a_user, b.id);
         this.run('DELETE FROM preferences WHERE allocation_id IN (?,?)', a.id, b.id);
         this.run("UPDATE matches SET status='ACCEPTED' WHERE id=?", m.id);
+        this.audit(id, 'allocation.swapped', 'match', m.id, { a: a.id, b: b.id });
         return { status: 'ACCEPTED' };
       }
       return { status: 'PENDING' };
     });
   }
-  advance(id: string) {
-    this.business(id);
+  advance(id: string, campaignId = 'astral') {
+    this.manager(id, campaignId);
     return this.transaction(() => {
-      const c = this.campaign();
-      const next = phases[phases.indexOf(c.phase) + 1];
+      const c = this.campaign(campaignId);
+      const index = phaseIndex(c.phase);
+      if (index < 0) throw new DomainError('INVALID_STATE');
+      const next = phases[index + 1];
       if (!next) throw new DomainError('CAMPAIGN_COMPLETE');
+      this.audit(id, 'campaign.phase', 'campaign', c.id, { from: c.phase, to: next });
       if (next === 'PREORDER_CLOSED')
         this.run(
           'UPDATE fairness_commitments SET revealed_at=? WHERE campaign_id=? AND revealed_at IS NULL',
@@ -750,8 +810,11 @@ export class Loopbox {
           c.id,
         );
       if (next === 'ALLOCATION_LOCKED') {
-        this.run("UPDATE matches SET status='EXPIRED' WHERE status='PENDING'");
-        this.run('DELETE FROM preferences');
+        this.run("UPDATE matches SET status='EXPIRED' WHERE status='PENDING' AND campaign_id=?", c.id);
+        this.run(
+          'DELETE FROM preferences WHERE allocation_id IN (SELECT id FROM allocations WHERE campaign_id=?)',
+          c.id,
+        );
         this.run("UPDATE allocations SET status='LOCKED_FOR_PRODUCTION' WHERE campaign_id=?", c.id);
       }
       this.run('UPDATE campaigns SET phase=? WHERE id=?', next, c.id);
@@ -774,9 +837,10 @@ export class Loopbox {
       attempts_per_day?: number;
     },
   ) {
-    this.business(id);
+    this.manager(id, 'astral');
     return this.transaction(() => {
       const c = this.campaign();
+      this.audit(id, 'campaign.edited', 'campaign', c.id, { price: changes.price });
       if (!['UPCOMING', 'ACTIVE_PREORDER'].includes(c.phase))
         throw new DomainError('CAMPAIGN_NOT_EDITABLE');
       if (changes.capacity < c.confirmed) throw new DomainError('CAP_BELOW_CONFIRMED');
@@ -811,6 +875,125 @@ export class Loopbox {
       );
       return { ok: true };
     });
+  }
+  /** ADMIN: IN_REVIEW → live. Builds the shuffled pool and publishes its fingerprint first. */
+  publishCampaign(adminId: string, campaignId: string) {
+    this.admin(adminId);
+    return this.transaction(() => {
+      const c = this.campaign(campaignId);
+      if (c.phase !== 'IN_REVIEW') throw new DomainError('INVALID_STATE');
+      const chars = this.all<{ id: string; units: number }>(
+        'SELECT id,units FROM characters WHERE campaign_id=? ORDER BY rowid',
+        c.id,
+      );
+      if (chars.reduce((n, ch) => n + ch.units, 0) !== c.capacity)
+        throw new DomainError('VALIDATION_FAILED', 422);
+      if (!this.one('SELECT 1 FROM fairness_commitments WHERE campaign_id=?', c.id)) {
+        const seedHex = newSeedHex();
+        const order = shuffle(buildPool(chars, c.capacity), seedHex);
+        const insert = this.db.prepare(
+          'INSERT INTO pool_units (id,campaign_id,position,character_id,allocated,created_at) VALUES (?,?,?,?,0,?)',
+        );
+        order.forEach((characterId, position) =>
+          insert.run(randomUUID(), c.id, position, characterId, this.now()),
+        );
+        this.run(
+          'INSERT INTO fairness_commitments (campaign_id,commitment_hex,seed_hex,committed_at,created_at) VALUES (?,?,?,?,?)',
+          c.id,
+          commitment(seedHex, order),
+          seedHex,
+          this.now(),
+          this.now(),
+        );
+      }
+      const phase = this.now() >= c.starts_at ? 'ACTIVE_PREORDER' : 'UPCOMING';
+      this.run('UPDATE campaigns SET phase=? WHERE id=?', phase, c.id);
+      this.audit(adminId, 'campaign.published', 'campaign', c.id, { phase });
+      return { phase };
+    });
+  }
+  /** ADMIN: stop new orders and reveal the shuffle seed. A second call is INVALID_STATE. */
+  closeCampaign(adminId: string, campaignId: string) {
+    this.admin(adminId);
+    return this.transaction(() => {
+      const c = this.campaign(campaignId);
+      if (c.phase !== 'ACTIVE_PREORDER') throw new DomainError('INVALID_STATE');
+      this.run("UPDATE campaigns SET phase='PREORDER_CLOSED' WHERE id=?", c.id);
+      this.run(
+        'UPDATE fairness_commitments SET revealed_at=? WHERE campaign_id=? AND revealed_at IS NULL',
+        this.now(),
+        c.id,
+      );
+      this.audit(adminId, 'campaign.closed', 'campaign', c.id, {});
+      return { phase: 'PREORDER_CLOSED' };
+    });
+  }
+  /** ADMIN: expire stale reservations and re-run trade matching (FIFO). */
+  sweep(adminId: string) {
+    this.admin(adminId);
+    const before = this.one<{ n: number }>("SELECT COUNT(*) AS n FROM orders WHERE status='EXPIRED'")!.n;
+    this.sweepExpired();
+    const expired =
+      this.one<{ n: number }>("SELECT COUNT(*) AS n FROM orders WHERE status='EXPIRED'")!.n - before;
+    const matched = this.transaction(() => {
+      let n = 0;
+      const open = this.all<{ id: string; campaign_id: string }>(
+        "SELECT a.id,a.campaign_id FROM allocations a JOIN campaigns c ON c.id=a.campaign_id WHERE a.status='TRADE_LISTED' AND c.phase IN ('ACTIVE_PREORDER','PREORDER_CLOSED','TRADE_WINDOW') ORDER BY a.created_at,a.id",
+      );
+      for (const a of open) if (this.matchListing(a.id).matched) n++;
+      return n;
+    });
+    const extra = this.sweepMore();
+    this.transaction(() => this.audit(adminId, 'admin.sweep', 'system', 'sweep', { expired, matched, ...extra }));
+    return { expired, matched, ...extra };
+  }
+  /** Extra sweep work added by later services (marketplace auto-complete). */
+  protected sweepMore(): Record<string, number> {
+    return {};
+  }
+  /** Manufacturing manifest: one row per character from paid allocations, plus a total row. */
+  manifest(id: string, campaignId: string) {
+    this.manager(id, campaignId);
+    const c = this.campaign(campaignId);
+    const rows = this.all<{ id: string; name: string; rarity: string; quantity: number }>(
+      "SELECT ch.id,ch.name,ch.rarity,(SELECT COUNT(*) FROM allocations a JOIN orders o ON o.id=a.order_id WHERE a.character_id=ch.id AND a.campaign_id=ch.campaign_id AND o.status IN ('PAID','DEMO_PAID')) AS quantity FROM characters ch WHERE ch.campaign_id=? ORDER BY ch.rowid",
+      c.id,
+    );
+    const total = rows.reduce((n, r) => n + r.quantity, 0);
+    const csv = [
+      'campaign_id,character_id,character_name,rarity,quantity',
+      ...rows.map((r) => [c.id, r.id, r.name, r.rarity, r.quantity].map(csvCell).join(',')),
+      [c.id, 'TOTAL', '', '', total].map(csvCell).join(','),
+    ].join('\r\n');
+    const date = new Date(this.now() + 8 * 3600000).toISOString().slice(0, 10).replaceAll('-', '');
+    return {
+      filename: `manifest-${c.id}-${date}.csv`,
+      csv: csv + '\r\n',
+      total,
+      final: phaseIndex(c.phase) >= phases.indexOf('ALLOCATION_LOCKED'),
+    };
+  }
+  /** ADMIN: last 200 audit rows. Details hold ids only, never names, emails or phones. */
+  auditLog(adminId: string, entity?: string) {
+    this.admin(adminId);
+    return entity
+      ? this.all<AuditRow>(
+          'SELECT id,actor_id,action,entity,entity_id,detail,created_at FROM audit_log WHERE entity=? ORDER BY created_at DESC,rowid DESC LIMIT 200',
+          entity,
+        )
+      : this.all<AuditRow>(
+          'SELECT id,actor_id,action,entity,entity_id,detail,created_at FROM audit_log ORDER BY created_at DESC,rowid DESC LIMIT 200',
+        );
+  }
+  adminCampaigns(adminId: string) {
+    this.admin(adminId);
+    return this.all<AdminCampaign>(
+      `SELECT c.id,c.name,c.phase,c.capacity,c.price,c.starts_at,p.name AS partner,
+        (SELECT COUNT(*) FROM orders WHERE campaign_id=c.id AND status IN ('PAID','DEMO_PAID')) AS paid,
+        (SELECT COUNT(*) FROM orders WHERE campaign_id=c.id AND status='PENDING_PAYMENT') AS pending,
+        (SELECT COUNT(*) FROM pool_units WHERE campaign_id=c.id) AS pool
+       FROM campaigns c LEFT JOIN partners p ON p.id=c.partner_id ORDER BY c.created_at DESC,c.id`,
+    );
   }
   snapshot(user: User | null): Snapshot {
     this.sweepExpired();
@@ -847,14 +1030,15 @@ export class Loopbox {
         id,
       ),
       payment: { mode: paymentMode(this.demo), simulate: simulateAllowed(this.demo) },
+      identities: this.demoIdentities(),
       attemptLimit: this.attemptLimit(c),
       attemptsLeft: Math.max(0, this.attemptLimit(c) - this.attemptsUsed(id, c.id)),
     };
   }
-  analytics(id: string): Analytics {
-    this.business(id);
+  analytics(id: string, campaignId = 'astral'): Analytics {
+    this.manager(id, campaignId);
     const count = (sql: string) => this.one<{ n: number }>(sql)!.n;
-    const c = this.campaign();
+    const c = this.campaign(campaignId);
     const plays = count('SELECT COUNT(*) AS n FROM game_sessions'),
       wins = count('SELECT COUNT(*) AS n FROM game_sessions WHERE won=1');
     const paid = this.one<{ n: number }>(

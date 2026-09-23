@@ -2,7 +2,7 @@
 import { Download, LockKeyhole, Package } from 'lucide-react';
 import { useLoop } from './provider';
 import { KinArt, BoxArt } from './art';
-import { characters, phases } from '../lib/catalog';
+import { characters, phaseIndex } from '../lib/catalog';
 import { Pending } from './shell';
 import { downloadCard } from './purchase';
 import { Button, Empty, Tier } from './ui';
@@ -35,7 +35,7 @@ export function Collection() {
   const { data } = useLoop();
   if (!data) return <Pending />;
   if (data.user?.role !== 'COLLECTOR') return <CollectorGate />;
-  const locked = phases.indexOf(data.campaign.phase) >= 4;
+  const locked = phaseIndex(data.campaign.phase) >= 4;
   return (
     <section className="wrap collection">
       <div className="page-heading">
