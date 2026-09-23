@@ -1,5 +1,7 @@
 import { defineConfig } from '@playwright/test';
 import { resolve } from 'node:path';
+// PW_CHROMIUM_PATH lets machines without Google Chrome (CI containers) use a local Chromium build.
+const chromium = process.env.PW_CHROMIUM_PATH;
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
@@ -9,7 +11,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:3100',
-    channel: 'chrome',
+    ...(chromium ? { launchOptions: { executablePath: chromium } } : { channel: 'chrome' }),
     viewport: { width: 1440, height: 1000 },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

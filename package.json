@@ -5,12 +5,13 @@
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
-    "start": "next start --hostname 127.0.0.1",
+    "start": "node scripts/start.mjs",
     "typecheck": "tsc --noEmit --incremental false",
-    "lint": "eslint src tests *.ts *.mjs",
+    "lint": "eslint src tests scripts *.ts *.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "format": "prettier --write src tests *.ts *.mjs *.json *.md"
+    "format": "prettier --write src tests *.ts *.mjs *.json *.md",
+    "reset:demo": "node scripts/reset-demo.mjs"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",

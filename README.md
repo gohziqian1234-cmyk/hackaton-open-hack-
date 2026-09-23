@@ -67,7 +67,19 @@ Use the top-right switcher for **Alex / Demo collector** and **Astral Studio / D
 6. Refresh `/collection` to see persistent Aurora Warden ownership.
 7. Switch to `/studio`; inspect confirmed orders and demand, then advance through **Preorder closed → Trade window → Allocation locked**. The final manufacturing plan totals 94 units in this path.
 
-For a repeatable run, stop the server and remove only the generated `data/loopbox.sqlite` and related `-wal`/`-shm` files. Restart the app. This deletes local demo progress.
+For a repeatable run, stop the server and run `npm run reset:demo` (it removes only the generated `data/loopbox.sqlite` and related `-wal`/`-shm` files). Restart the app. This deletes local demo progress.
+
+## Deploy (single host)
+
+LoopBox stores everything in one SQLite file, so it must run on **one Node 24 server with a persistent disk**. Do not deploy it to Vercel or any serverless platform: every write would be lost.
+
+- **Runtime:** Node 24 or newer.
+- **Disk:** mount a persistent volume at `data/` (or point `LOOPBOX_DB` at a file on the volume).
+- **Environment:** copy the variables from `.env.example` into the host's settings. Set `HOSTNAME=0.0.0.0` so the server accepts outside traffic. The host's `PORT` variable is respected.
+- **Build and start:** `npm ci && npm run build`, then `npm start`.
+- **Health check:** `GET /api/health` returns `{"ok":true,"db":true,"demo":true}` when the database opens.
+
+`npm start` binds to `127.0.0.1` unless `HOSTNAME` is set, so a laptop demo is never exposed to the local network by accident. The laptop (`npm run build && npm start`) is always the backup if the host is down.
 
 ## Testing
 
