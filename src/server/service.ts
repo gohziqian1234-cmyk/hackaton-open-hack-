@@ -4,7 +4,18 @@ import { lore, phases, questConfig } from '../lib/catalog';
 import { scoreRun } from '../lib/game';
 import { startOfSgtDay } from '../domain/time';
 import { winRate } from '../domain/metrics';
-import type { Allocation, Campaign, User, Snapshot, Match, Access, Analytics } from '../lib/types';
+import { buildPool, commitment, shuffle, verify } from '../domain/fairness';
+import { DEMO_SEED_HEX } from './seed';
+import type {
+  Allocation,
+  Campaign,
+  User,
+  Snapshot,
+  Match,
+  Access,
+  Analytics,
+  Verification,
+} from '../lib/types';
 
 export class DomainError extends Error {
   constructor(
@@ -224,29 +235,10 @@ export class Loopbox {
         throw new DomainError('INVALID_ACCESS', 403);
       if (a.status !== 'AVAILABLE') throw new DomainError('ACCESS_ALREADY_USED');
       if (a.expires_at <= this.now()) throw new DomainError('ACCESS_EXPIRED');
-      const orderId = randomUUID(),
-        allocationId = randomUUID();
-      // The advertised golden path is deterministic in demo mode. Live allocation is weighted.
-      let character = 'eclipse';
-      if (!this.demo) {
-        const choices = this.all<{ id: string; weight: number }>(
-          'SELECT id,weight FROM characters WHERE campaign_id=?',
-          c.id,
-        );
-        const total = choices.reduce((s, v) => s + v.weight, 0);
-        let point = (randomInt(1000000) / 1000000) * total;
-        character = choices[choices.length - 1].id;
-        for (const ch of choices) {
-          point -= ch.weight;
-          if (point < 0) {
-            character = ch.id;
-            break;
-          }
-        }
-      }
-      this.run('UPDATE access SET status=? WHERE id=?', 'REDEEMED', a.id);
+      const orderId = randomUUID();
+      this.run("UPDATE access SET status='REDEEMED' WHERE id=?", a.id);
       this.run(
-        'INSERT INTO orders VALUES (?,?,?,?,?,?,?)',
+        'INSERT INTO orders (id,user_id,campaign_id,access_id,amount,status,created_at) VALUES (?,?,?,?,?,?,?)',
         orderId,
         id,
         c.id,
@@ -255,20 +247,98 @@ export class Loopbox {
         'DEMO_PAID',
         this.now(),
       );
-      this.run(
-        'INSERT INTO allocations VALUES (?,?,?,?,?,?,?,?,?)',
-        allocationId,
-        orderId,
-        c.id,
-        id,
-        id,
-        character,
-        'OWNED',
-        0,
-        this.now(),
-      );
+      const allocationId = this.allocate(orderId, id, c.id);
       return { orderId, allocationId };
     });
+  }
+  /**
+   * Gives an order the lowest unsold position in the committed shuffle. Must run inside the
+   * caller's BEGIN IMMEDIATE transaction, which serialises writers, so no two orders can
+   * take the same unit (also enforced by the unique pool_unit_id index).
+   */
+  allocate(orderId: string, userId: string, campaignId: string) {
+    const unit = this.one<{ id: string; character_id: string }>(
+      'SELECT id,character_id FROM pool_units WHERE campaign_id=? AND allocated=0 ORDER BY position LIMIT 1',
+      campaignId,
+    );
+    if (!unit) throw new DomainError('SOLD_OUT');
+    this.run('UPDATE pool_units SET allocated=1 WHERE id=? AND allocated=0', unit.id);
+    const allocationId = randomUUID();
+    this.run(
+      'INSERT INTO allocations (id,order_id,campaign_id,owner_id,original_owner_id,character_id,status,revealed,created_at,pool_unit_id) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      allocationId,
+      orderId,
+      campaignId,
+      userId,
+      userId,
+      unit.character_id,
+      'OWNED',
+      0,
+      this.now(),
+      unit.id,
+    );
+    return allocationId;
+  }
+  /** Public fairness record. The seed and full order are only returned after preorders close. */
+  verification(campaignId: string, userId?: string): Verification {
+    const c = this.one<{ id: string; name: string; capacity: number }>(
+      'SELECT id,name,capacity FROM campaigns WHERE id=?',
+      campaignId,
+    );
+    const f = this.one<{
+      commitment_hex: string;
+      seed_hex: string;
+      committed_at: number;
+      revealed_at: number | null;
+    }>('SELECT * FROM fairness_commitments WHERE campaign_id=?', campaignId);
+    if (!c || !f) throw new DomainError('NOT_FOUND', 404);
+    const units = this.all<{ id: string; name: string; units: number }>(
+      'SELECT id,name,units FROM characters WHERE campaign_id=? ORDER BY rowid',
+      campaignId,
+    );
+    const yourPositions = userId
+      ? this.all<{ position: number }>(
+          'SELECT p.position FROM allocations a JOIN pool_units p ON p.id=a.pool_unit_id WHERE a.campaign_id=? AND a.original_owner_id=? ORDER BY p.position',
+          campaignId,
+          userId,
+        ).map((r) => r.position)
+      : [];
+    const base = {
+      campaign: { id: c.id, name: c.name, capacity: c.capacity },
+      characters: units,
+      commitment: f.commitment_hex,
+      committedAt: f.committed_at,
+      revealed: f.revealed_at !== null,
+      revealedAt: f.revealed_at,
+      yourPositions,
+      demoNote: this.demo && f.seed_hex === DEMO_SEED_HEX,
+      sold: this.one<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM pool_units WHERE campaign_id=? AND allocated=1',
+        campaignId,
+      )!.n,
+    };
+    if (f.revealed_at === null) return base;
+    const order = this.all<{ character_id: string }>(
+      'SELECT character_id FROM pool_units WHERE campaign_id=? ORDER BY position',
+      campaignId,
+    ).map((r) => r.character_id);
+    const recomputed = shuffle(
+      buildPool(
+        units.map((u) => ({ id: u.id, units: u.units })),
+        c.capacity,
+      ),
+      f.seed_hex,
+    );
+    return {
+      ...base,
+      seed: f.seed_hex,
+      order,
+      serverCheck: {
+        recomputedCommitment: commitment(f.seed_hex, recomputed),
+        orderMatches: recomputed.join(',') === order.join(','),
+        fingerprintMatches: verify(f.seed_hex, order, f.commitment_hex),
+      },
+    };
   }
   owned(id: string, allocationId: string) {
     const a = this.one<Allocation>(
@@ -400,6 +470,12 @@ export class Loopbox {
       const c = this.campaign();
       const next = phases[phases.indexOf(c.phase) + 1];
       if (!next) throw new DomainError('CAMPAIGN_COMPLETE');
+      if (next === 'PREORDER_CLOSED')
+        this.run(
+          'UPDATE fairness_commitments SET revealed_at=? WHERE campaign_id=? AND revealed_at IS NULL',
+          this.now(),
+          c.id,
+        );
       if (next === 'ALLOCATION_LOCKED') {
         this.run("UPDATE matches SET status='EXPIRED' WHERE status='PENDING'");
         this.run('DELETE FROM preferences');
@@ -431,6 +507,11 @@ export class Loopbox {
       if (!['UPCOMING', 'ACTIVE_PREORDER'].includes(c.phase))
         throw new DomainError('CAMPAIGN_NOT_EDITABLE');
       if (changes.capacity < c.confirmed) throw new DomainError('CAP_BELOW_CONFIRMED');
+      const pool = this.one<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM pool_units WHERE campaign_id=?',
+        c.id,
+      )!.n;
+      if (pool > 0 && changes.capacity > pool) throw new DomainError('LOCKED_AFTER_LIVE');
       if (changes.starts_at >= changes.ends_at || changes.ends_at > changes.trade_ends_at)
         throw new DomainError('INVALID_DATES', 400);
       this.run(
@@ -477,7 +558,7 @@ export class Loopbox {
         this.now(),
       ),
       collection: this.all<Allocation>(
-        "SELECT id,CASE WHEN revealed=1 THEN character_id ELSE '' END AS character_id,owner_id,status,revealed,order_id FROM allocations WHERE owner_id=? ORDER BY created_at DESC",
+        "SELECT a.id,CASE WHEN a.revealed=1 THEN a.character_id ELSE '' END AS character_id,a.owner_id,a.status,a.revealed,a.order_id,p.position FROM allocations a LEFT JOIN pool_units p ON p.id=a.pool_unit_id WHERE a.owner_id=? ORDER BY a.created_at DESC,a.id",
         id,
       ),
       matches: this.all<Match>(

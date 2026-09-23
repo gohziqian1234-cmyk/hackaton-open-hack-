@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Stage } from './stage';
 import { KinArt } from './art';
@@ -34,7 +35,6 @@ export function Discovery() {
           </p>
           <div className="hero-cta">
             <Button href="/drop">Explore the drop</Button>
-            {/* The fairness page arrives in M4. */}
             <Button href="/verify/astral" variant="quiet">
               How the draw stays fair
             </Button>
@@ -121,8 +121,10 @@ export function Drop() {
           })}
         </ul>
         <p className="note drop-disclosure">
-          Demo note: the new box in this walkthrough is Eclipse Knight every time, so the trade
-          demo is repeatable. No real money is taken.
+          Every box was shuffled before the drop opened and the fingerprint was published.{' '}
+          <Link href={'/verify/' + c.id}>Check the draw yourself</Link>. Demo note: the demo uses a
+          fixed shuffle, so the next box is always Eclipse Knight and the walkthrough is
+          repeatable. No real money is taken.
         </p>
       </div>
       <aside className="panel buy" aria-label="Buy a box">

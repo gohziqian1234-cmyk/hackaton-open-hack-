@@ -39,6 +39,51 @@ function addColumn(db: DatabaseSync, table: string, column: string, definition: 
   if (!hasColumn(db, table, column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
+/**
+ * Guards that make records append-only. Kept here so a demo reset can drop and recreate them.
+ * Each entry is [trigger name, CREATE statement].
+ */
+export const guardTriggers: [string, string][] = [
+  [
+    'pool_units_fixed',
+    "CREATE TRIGGER IF NOT EXISTS pool_units_fixed BEFORE UPDATE OF campaign_id,position,character_id ON pool_units BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
+  ],
+  [
+    'pool_units_no_unallocate',
+    "CREATE TRIGGER IF NOT EXISTS pool_units_no_unallocate BEFORE UPDATE OF allocated ON pool_units WHEN OLD.allocated=1 AND NEW.allocated=0 BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
+  ],
+  [
+    'pool_units_no_delete',
+    "CREATE TRIGGER IF NOT EXISTS pool_units_no_delete BEFORE DELETE ON pool_units BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
+  ],
+  [
+    'commitment_fixed',
+    "CREATE TRIGGER IF NOT EXISTS commitment_fixed BEFORE UPDATE OF campaign_id,commitment_hex,seed_hex,committed_at ON fairness_commitments BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
+  ],
+  [
+    'commitment_no_delete',
+    "CREATE TRIGGER IF NOT EXISTS commitment_no_delete BEFORE DELETE ON fairness_commitments BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
+  ],
+];
+const createGuards = (db: DatabaseSync, names: string[]) =>
+  guardTriggers.filter(([name]) => names.includes(name)).forEach(([, sql]) => db.exec(sql));
+
+/** Removes every row from every table (demo reset). Caller must have foreign keys off. */
+export function wipeAll(db: DatabaseSync) {
+  const present = new Set(
+    (db.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all() as { name: string }[]).map(
+      (t) => t.name,
+    ),
+  );
+  const guards = guardTriggers.filter(([name]) => present.has(name));
+  for (const [name] of guards) db.exec(`DROP TRIGGER ${name}`);
+  const tables = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+    .all() as { name: string }[];
+  for (const { name } of tables) db.exec(`DELETE FROM ${name}`);
+  for (const [, sql] of guards) db.exec(sql);
+}
+
 /** Forward-only. Each migration runs once, in order, inside its own transaction. */
 export const migrations: Migration[] = [
   { id: 1, name: 'v1 base schema', up: (db) => db.exec(v1) },
@@ -52,6 +97,45 @@ export const migrations: Migration[] = [
       addColumn(db, 'game_sessions', 'won', 'INTEGER NOT NULL DEFAULT 0 CHECK(won IN (0,1))');
       db.exec(`UPDATE game_sessions SET won=1 WHERE completed_at IS NOT NULL AND ((mode='run' AND score>=10) OR (mode='lore' AND score=3));
         CREATE INDEX IF NOT EXISTS game_sessions_attempts ON game_sessions(user_id,campaign_id,started_at);`);
+    },
+  },
+  {
+    id: 3,
+    name: 'M4 committed pool and fairness proof',
+    up: (db) => {
+      addColumn(db, 'characters', 'units', 'INTEGER NOT NULL DEFAULT 0 CHECK(units>=0)');
+      addColumn(db, 'characters', 'color', 'TEXT');
+      addColumn(db, 'characters', 'description', 'TEXT');
+      db.exec(`
+CREATE TABLE IF NOT EXISTS pool_units(id TEXT PRIMARY KEY,campaign_id TEXT NOT NULL REFERENCES campaigns(id),position INTEGER NOT NULL CHECK(position>=0),character_id TEXT NOT NULL REFERENCES characters(id),allocated INTEGER NOT NULL DEFAULT 0 CHECK(allocated IN (0,1)),created_at INTEGER NOT NULL,UNIQUE(campaign_id,position));
+CREATE INDEX IF NOT EXISTS pool_units_next ON pool_units(campaign_id,allocated,position);
+CREATE TABLE IF NOT EXISTS fairness_commitments(campaign_id TEXT PRIMARY KEY REFERENCES campaigns(id),commitment_hex TEXT NOT NULL CHECK(length(commitment_hex)=64),seed_hex TEXT NOT NULL CHECK(length(seed_hex)=64),committed_at INTEGER NOT NULL,revealed_at INTEGER,created_at INTEGER NOT NULL);`);
+      addColumn(db, 'allocations', 'pool_unit_id', 'TEXT REFERENCES pool_units(id)');
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS allocations_pool_unit ON allocations(pool_unit_id)');
+      createGuards(db, [
+        'pool_units_fixed',
+        'pool_units_no_unallocate',
+        'pool_units_no_delete',
+        'commitment_fixed',
+        'commitment_no_delete',
+      ]);
+      // v1 allocations were weighted-random demo data (every v1 order is DEMO_PAID) and cannot be
+      // mapped onto a shuffle published before they were sold. Wipe them; seed() rebuilds the
+      // demo drop with a committed pool. Any real order blocks this and requires a manual reset.
+      const legacy = db
+        .prepare('SELECT COUNT(*) AS n FROM allocations WHERE pool_unit_id IS NULL')
+        .get() as { n: number };
+      if (legacy.n > 0) {
+        const real = db
+          .prepare("SELECT COUNT(*) AS n FROM orders WHERE status<>'DEMO_PAID'")
+          .get() as { n: number };
+        if (real.n > 0)
+          throw new Error(
+            'This database has allocations made before the fairness upgrade. Stop the server and run `npm run reset:demo`.',
+          );
+        console.warn('LoopBox: replacing v1 demo data with the committed-shuffle demo drop.');
+        wipeAll(db);
+      }
     },
   },
 ];

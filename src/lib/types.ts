@@ -27,6 +27,7 @@ export interface Allocation {
   status: string;
   revealed: number;
   order_id: string;
+  position?: number | null;
 }
 export interface Access {
   id: string;
@@ -72,4 +73,18 @@ export interface Analytics {
   listings: number;
   trades: number;
   distribution: { id: string; name: string; rarity: string; quantity: number }[];
+}
+export interface Verification {
+  campaign: { id: string; name: string; capacity: number };
+  characters: { id: string; name: string; units: number }[];
+  commitment: string;
+  committedAt: number;
+  revealed: boolean;
+  revealedAt: number | null;
+  yourPositions: number[];
+  demoNote: boolean;
+  sold: number;
+  seed?: string;
+  order?: string[];
+  serverCheck?: { recomputedCommitment: string; orderMatches: boolean; fingerprintMatches: boolean };
 }

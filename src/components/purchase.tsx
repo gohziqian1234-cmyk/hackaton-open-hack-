@@ -145,7 +145,11 @@ export function Reveal() {
         <ArrowLeft size={18} aria-hidden="true" /> My collection
       </Link>
       <p className="reveal-kicker">
-        {shown === 'done' ? 'Your Astral Kin' : 'One sealed box, already allocated to you'}
+        {existing.position != null
+          ? `Box ${existing.position + 1} of ${data.campaign.capacity}`
+          : shown === 'done'
+            ? 'Your Astral Kin'
+            : 'One sealed box, already allocated to you'}
       </p>
       <div className="reveal-stage">
         <div className="burst" aria-hidden="true" />

@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { createDatabase, seed } from '../../src/server/db';
+import { DomainError, Loopbox } from '../../src/server/service';
 import { resolve } from 'node:path';
 import { mkdirSync } from 'node:fs';
 const screenshotDir = resolve('../../work/qa');
@@ -92,6 +93,9 @@ test('golden path: quest, preorder, reveal, direct trade, final production', asy
   }
   await expect(page.getByRole('heading', { name: 'Ready to make.' })).toBeVisible();
   await page.screenshot({ path: resolve(screenshotDir, '07-studio.png'), fullPage: true });
+  await page.goto('/verify/astral');
+  await expect(page.getByText('Fingerprints match')).toBeVisible();
+  await page.screenshot({ path: resolve(screenshotDir, '08-verify.png'), fullPage: true });
   const analytics = await (await page.request.get('/api/loopbox?analytics=1')).json();
   expect(analytics.orders).toBe(94);
   expect(analytics.trades).toBe(1);
@@ -249,4 +253,48 @@ test('studio settings keep edited allocation weights on reopening', async ({ pag
   await page.getByRole('button', { name: 'Edit campaign' }).click();
   await expect(dialog.locator('input[name="nova"]')).toHaveValue('23');
   await expect(dialog.locator('input[name="price"]')).toHaveValue('19.5');
+});
+
+test('committed pool: 50 concurrent purchases across two processes for the last 3 boxes', async ({
+  page,
+}) => {
+  await login(page);
+  const origin = { Origin: 'http://127.0.0.1:3100' };
+  const db = createDatabase('data/e2e.sqlite');
+  db.exec(`UPDATE campaigns SET max_per_user=60;
+    UPDATE pool_units SET allocated=1 WHERE campaign_id='astral' AND position BETWEEN 93 AND 96;`);
+  const now = Date.now();
+  const insert = db.prepare(
+    'INSERT INTO access (id,user_id,campaign_id,earned_at,expires_at,status) VALUES (?,?,?,?,?,?)',
+  );
+  const ids = Array.from({ length: 50 }, (_, i) => {
+    insert.run('race-' + i, 'collector', 'astral', now, now + 600000, 'AVAILABLE');
+    return 'race-' + i;
+  });
+  // 45 purchases go through the web server process while this test process buys 5 directly
+  // on its own database connection at the same moment.
+  const http = Promise.all(
+    ids.slice(0, 45).map((accessId) =>
+      page.request.post('/api/loopbox', { headers: origin, data: { action: 'preorder', accessId } }),
+    ),
+  );
+  const direct = new Loopbox(db, () => Date.now(), true);
+  const directWins = ids.slice(45).filter((accessId) => {
+    try {
+      direct.preorder('collector', accessId);
+      return true;
+    } catch (e) {
+      if (e instanceof DomainError && e.code === 'SOLD_OUT') return false;
+      throw e;
+    }
+  }).length;
+  const statuses = (await http).map((r) => r.status());
+  expect(statuses.filter((s) => s !== 200 && s !== 409)).toEqual([]);
+  expect(statuses.filter((s) => s === 200).length + directWins).toBe(3);
+  const units = db
+    .prepare("SELECT pool_unit_id FROM allocations WHERE campaign_id='astral'")
+    .all() as { pool_unit_id: string }[];
+  expect(units).toHaveLength(96);
+  expect(new Set(units.map((u) => u.pool_unit_id)).size).toBe(96);
+  db.close();
 });

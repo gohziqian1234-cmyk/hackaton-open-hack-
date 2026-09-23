@@ -2,10 +2,9 @@ import { cookies } from 'next/headers';
 import { getDb } from '../../../server/db';
 import { Loopbox, DomainError } from '../../../server/service';
 import { actionSchema } from '../../../server/validation';
+import { assertSameOrigin, failure, json as response } from '../../../server/http';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-const response = (data: unknown, status = 200) =>
-  Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 export async function GET(request: Request) {
   try {
     const service = new Loopbox(getDb());
@@ -21,10 +20,7 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   try {
-    const origin = request.headers.get('origin');
-    const host = request.headers.get('host');
-    if (!origin || !host || new URL(origin).host !== host)
-      throw new DomainError('INVALID_ORIGIN', 403);
+    assertSameOrigin(request);
     const text = await request.text();
     if (text.length > 8192) throw new DomainError('REQUEST_TOO_LARGE', 413);
     const parsed = actionSchema.safeParse(JSON.parse(text));
@@ -76,10 +72,4 @@ export async function POST(request: Request) {
   } catch (e) {
     return failure(e);
   }
-}
-function failure(e: unknown) {
-  if (e instanceof DomainError) return response({ error: e.code }, e.status);
-  if (e instanceof SyntaxError) return response({ error: 'INVALID_INPUT' }, 400);
-  console.error('LoopBox request failed', e instanceof Error ? e.message : 'unknown');
-  return response({ error: 'SERVER_ERROR' }, 500);
 }
