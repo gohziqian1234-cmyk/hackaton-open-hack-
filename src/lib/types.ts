@@ -106,6 +106,8 @@ export type Snapshot = CoreSnapshot & {
   interest: string[];
   /** The user's opened blind boxes and what happened to them (all drops). */
   items: OrderItem[];
+  /** Won slots not opened yet, in every drop. */
+  slots: { id: string; campaign_id: string; expires_at: number }[];
 };
 /** One opened slot: slot_won (an unused access) → opened → confirmed → in_production → shipped. */
 export interface OrderItem {

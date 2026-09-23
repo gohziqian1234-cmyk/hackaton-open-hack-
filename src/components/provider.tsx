@@ -43,6 +43,13 @@ const messages: Record<string, string> = {
   LOCKED_AFTER_LIVE: 'This is live, so those details are locked.',
   INVALID_INPUT: 'Some details are missing or in the wrong format.',
   INVALID_ORIGIN: 'Refresh the page and try again.',
+  ITEM_NOT_OPEN: 'That figure is no longer waiting for checkout.',
+  PAYMENT_IN_PROGRESS: 'A card payment is open for that figure. Finish or cancel it first.',
+  RESERVATION_EXPIRED: 'That reservation ran out, so the figure went back to the pool.',
+  CONFIRMATION_REQUIRED: 'Tick the box to confirm these figures will be made just for you.',
+  INVALID_CODE: 'That code isn’t a LoopBox figure code. Check it and try again.',
+  ALREADY_CLAIMED: 'This figure has already been added to another collection.',
+  ALREADY_YOURS: 'This figure is already in your collection.',
 };
 export const messageFor = (code: string) =>
   messages[code] || 'We couldn’t complete that action. Refresh and try again.';

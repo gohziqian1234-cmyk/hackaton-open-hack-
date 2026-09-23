@@ -319,6 +319,23 @@ CREATE TABLE IF NOT EXISTS theme_interest(id TEXT PRIMARY KEY,user_id TEXT NOT N
 CREATE INDEX IF NOT EXISTS theme_interest_theme ON theme_interest(theme_id);`);
     },
   },
+  {
+    id: 11,
+    name: 'v2 open-before-pay: order items and their payment attempts',
+    up: (db) => {
+      // One row per opened slot. Opening draws a pool unit and holds it (no allocation yet);
+      // the hold ends when the item is confirmed (paid → allocation), declined or expired.
+      // access_id UNIQUE: a slot can be opened once, so declining never re-rolls.
+      db.exec(`
+CREATE TABLE IF NOT EXISTS order_items(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),campaign_id TEXT NOT NULL REFERENCES campaigns(id),access_id TEXT NOT NULL UNIQUE REFERENCES access(id),pool_unit_id TEXT NOT NULL REFERENCES pool_units(id),character_id TEXT NOT NULL REFERENCES characters(id),state TEXT NOT NULL CHECK(state IN ('opened','confirmed','in_production','shipped','declined','expired')),slot_won_at INTEGER NOT NULL,opened_at INTEGER NOT NULL,reserved_until INTEGER NOT NULL,confirmed_at INTEGER,closed_at INTEGER,payment_mode TEXT CHECK(payment_mode IS NULL OR payment_mode IN ('stripe','demo')),payment_ref TEXT,order_id TEXT UNIQUE REFERENCES orders(id),allocation_id TEXT UNIQUE REFERENCES allocations(id),created_at INTEGER NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS order_items_held_unit ON order_items(pool_unit_id) WHERE state IN ('opened','confirmed','in_production','shipped');
+CREATE INDEX IF NOT EXISTS order_items_user ON order_items(user_id,campaign_id,state);
+CREATE INDEX IF NOT EXISTS order_items_expiry ON order_items(state,reserved_until);
+CREATE TABLE IF NOT EXISTS item_orders(order_id TEXT PRIMARY KEY REFERENCES orders(id),item_id TEXT NOT NULL REFERENCES order_items(id),basket_id TEXT NOT NULL,created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS item_orders_item ON item_orders(item_id,created_at);
+CREATE INDEX IF NOT EXISTS item_orders_basket ON item_orders(basket_id);`);
+    },
+  },
 ];
 
 export function migrate(db: DatabaseSync) {

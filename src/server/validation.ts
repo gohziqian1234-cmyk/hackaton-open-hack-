@@ -155,6 +155,14 @@ export const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('submitCampaign'), campaignId: slug }),
   z.object({ action: z.literal('waitlist'), campaignId: slug.optional() }),
   z.object({ action: z.literal('notifyTheme'), slug }),
+  z.object({ action: z.literal('openSlot'), accessId: id }),
+  z.object({ action: z.literal('declineItem'), itemId: id }),
+  z.object({
+    action: z.literal('confirmItems'),
+    itemIds: z.array(id).min(1).max(10),
+    ageConfirmed: z.literal(true),
+    understood: z.literal(true),
+  }),
   z.discriminatedUnion('channel', [
     z.object({ action: z.literal('sendOtp'), channel: z.literal('EMAIL'), target: email }),
     z.object({ action: z.literal('sendOtp'), channel: z.literal('PHONE'), target: phone }),

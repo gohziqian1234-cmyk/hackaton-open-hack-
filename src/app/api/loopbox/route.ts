@@ -114,6 +114,14 @@ export async function POST(request: Request) {
         return response(service.edit(user.id, data.changes));
       case 'waitlist':
         return response(service.waitlist(user.id, data.campaignId));
+      case 'openSlot':
+        return response(service.openSlot(user.id, data.accessId));
+      case 'declineItem':
+        return response(service.declineItem(user.id, data.itemId));
+      case 'confirmItems':
+        return response(
+          await service.confirmItems(user.id, data.itemIds, data.ageConfirmed, data.understood),
+        );
       case 'notifyTheme':
         return response(service.notifyTheme(user.id, data.slug));
       case 'sendOtp':
