@@ -87,6 +87,7 @@ export function OpeningSequence({
   onComplete,
   onTrade,
   keepHref,
+  onKeep,
   keepLabel = 'Keep it — go to checkout',
   tradeLabel = 'Trade it',
   tradeHref,
@@ -104,6 +105,8 @@ export function OpeningSequence({
   onComplete?: (c: CharacterInfo) => void;
   onTrade?: () => void;
   keepHref?: string;
+  /** Button instead of a link for the primary action (e.g. close the QR reveal). */
+  onKeep?: () => void;
   keepLabel?: string;
   tradeLabel?: string;
   tradeHref?: string;
@@ -549,6 +552,7 @@ export function OpeningSequence({
             {children}
             <div className="os-actions">
               {keepHref && <Button href={keepHref}>{keepLabel}</Button>}
+              {!keepHref && onKeep && <Button onClick={onKeep}>{keepLabel}</Button>}
               {tradeHref ? (
                 <Button href={tradeHref} variant="ghost">
                   {tradeLabel}

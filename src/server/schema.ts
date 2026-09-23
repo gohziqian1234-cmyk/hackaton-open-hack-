@@ -336,6 +336,16 @@ CREATE INDEX IF NOT EXISTS item_orders_item ON item_orders(item_id,created_at);
 CREATE INDEX IF NOT EXISTS item_orders_basket ON item_orders(basket_id);`);
     },
   },
+  {
+    id: 12,
+    name: 'v2 physical figures claimed by QR code',
+    up: (db) => {
+      // code_hash = SHA-256 of the 128-bit code; the code itself is never stored.
+      db.exec(`
+CREATE TABLE IF NOT EXISTS physical_items(id TEXT PRIMARY KEY,code_hash TEXT NOT NULL UNIQUE CHECK(length(code_hash)=64),theme_id TEXT NOT NULL REFERENCES themes(id),character_id TEXT NOT NULL REFERENCES characters(id),serial_no INTEGER NOT NULL CHECK(serial_no>0),claimed_by TEXT REFERENCES users(id),claimed_at INTEGER,created_at INTEGER NOT NULL,UNIQUE(character_id,serial_no),CHECK((claimed_by IS NULL)=(claimed_at IS NULL)));
+CREATE INDEX IF NOT EXISTS physical_items_owner ON physical_items(claimed_by,claimed_at);`);
+    },
+  },
 ];
 
 export function migrate(db: DatabaseSync) {

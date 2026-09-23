@@ -106,6 +106,8 @@ export type Snapshot = CoreSnapshot & {
   interest: string[];
   /** The user's opened blind boxes and what happened to them (all drops). */
   items: OrderItem[];
+  /** Physical figures this user added by QR code. */
+  physical: PhysicalFigure[];
   /** Won slots not opened yet, in every drop. */
   slots: { id: string; campaign_id: string; expires_at: number }[];
 };
@@ -204,4 +206,13 @@ export interface Verification {
   seed?: string;
   order?: string[];
   serverCheck?: { recomputedCommitment: string; orderMatches: boolean; fingerprintMatches: boolean };
+}
+export interface PhysicalFigure {
+  id: string;
+  character_id: string;
+  campaign_id: string;
+  theme_slug: string;
+  serial_no: number;
+  cap: number;
+  claimed_at: number;
 }

@@ -1,7 +1,15 @@
 // v2 Drops: theme browser data on top of the campaign engine (service → partners → market).
 import { randomUUID } from 'node:crypto';
 import type { SQLInputValue } from 'node:sqlite';
-import type { User, ThemeInfo, Snapshot, OrderItem, CharacterInfo } from '../lib/types';
+import type {
+  User,
+  ThemeInfo,
+  Snapshot,
+  OrderItem,
+  CharacterInfo,
+  PhysicalFigure,
+} from '../lib/types';
+import { createBatch, hashCode, normalizeCode } from './physical';
 import { DomainError } from './errors';
 import { Market } from './market';
 import { HELD_STATES, heldItemsSql } from './service';
@@ -163,10 +171,68 @@ export class Drops extends Market {
     ).map((r) => r.slug);
   }
   protected ownedCampaignsSql() {
-    return 'SELECT campaign_id FROM allocations WHERE owner_id=? UNION SELECT campaign_id FROM order_items WHERE user_id=?';
+    return 'SELECT campaign_id FROM allocations WHERE owner_id=? UNION SELECT campaign_id FROM order_items WHERE user_id=? UNION SELECT c.campaign_id FROM physical_items p JOIN characters c ON c.id=p.character_id WHERE p.claimed_by=?';
   }
   protected ownedCampaignsArgs(id: string): SQLInputValue[] {
-    return [id, id];
+    return [id, id, id];
+  }
+
+  // ---- physical figures (QR) ---------------------------------------------------------------
+  physical(userId: string, figureId?: string): PhysicalFigure[] {
+    return this.all<PhysicalFigure>(
+      `SELECT p.id,p.character_id,c.campaign_id,t.slug AS theme_slug,p.serial_no,k.capacity AS cap,p.claimed_at
+       FROM physical_items p JOIN characters c ON c.id=p.character_id JOIN themes t ON t.id=p.theme_id JOIN campaigns k ON k.id=c.campaign_id
+       WHERE p.claimed_by=? ${figureId ? 'AND p.id=?' : ''} ORDER BY p.claimed_at DESC,p.id`,
+      ...(figureId ? [userId, figureId] : [userId]),
+    );
+  }
+  /**
+   * Adds a physical figure to the user's collection. A code works once. Wrong, reused and
+   * foreign codes get distinct errors; nothing about the code is written to the audit log.
+   */
+  claimPhysical(userId: string, input: string) {
+    this.user(userId);
+    const code = normalizeCode(input);
+    if (!code) throw new DomainError('INVALID_CODE', 400);
+    return this.transaction(() => {
+      const p = this.one<{ id: string; claimed_by: string | null; character_id: string }>(
+        'SELECT id,claimed_by,character_id FROM physical_items WHERE code_hash=?',
+        hashCode(code),
+      );
+      if (!p) throw new DomainError('INVALID_CODE', 404);
+      if (p.claimed_by === userId) throw new DomainError('ALREADY_YOURS', 409);
+      if (p.claimed_by) throw new DomainError('ALREADY_CLAIMED', 409);
+      const done = this.run(
+        'UPDATE physical_items SET claimed_by=?,claimed_at=? WHERE id=? AND claimed_by IS NULL',
+        userId,
+        this.now(),
+        p.id,
+      );
+      if (Number(done.changes) !== 1) throw new DomainError('ALREADY_CLAIMED', 409);
+      this.audit(userId, 'physical.claimed', 'physical_item', p.id, {});
+      return {
+        figure: this.physical(userId, p.id)[0],
+        character: this.one<CharacterInfo>(
+          'SELECT id,campaign_id,name,rarity,units,color,description,slug FROM characters WHERE id=?',
+          p.character_id,
+        )!,
+      };
+    });
+  }
+  /** ADMIN: a printable batch. The raw codes are returned once and never stored. */
+  generatePhysical(adminId: string, themeSlug: string, count: number, origin: string) {
+    this.admin(adminId);
+    return this.transaction(() => {
+      let batch;
+      try {
+        batch = createBatch(this.db, themeSlug, count, origin, this.now());
+      } catch (e) {
+        if (e instanceof Error && e.message === 'NOT_FOUND') throw new DomainError('NOT_FOUND', 404);
+        throw e;
+      }
+      this.audit(adminId, 'physical.generated', 'theme', themeSlug, { count: batch.length });
+      return batch;
+    });
   }
 
   /**
@@ -432,6 +498,7 @@ export class Drops extends Market {
       themes: this.themes(),
       interest: user ? this.interest(user.id) : [],
       items: user ? this.items(user.id) : [],
+      physical: user ? this.physical(user.id) : [],
       slots: user
         ? this.all<{ id: string; campaign_id: string; expires_at: number }>(
             "SELECT id,campaign_id,expires_at FROM access WHERE user_id=? AND status='AVAILABLE' AND expires_at>? ORDER BY earned_at DESC",

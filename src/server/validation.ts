@@ -156,6 +156,12 @@ export const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('waitlist'), campaignId: slug.optional() }),
   z.object({ action: z.literal('notifyTheme'), slug }),
   z.object({ action: z.literal('openSlot'), accessId: id }),
+  z.object({ action: z.literal('claimPhysical'), code: z.string().min(1).max(300) }),
+  z.object({
+    action: z.literal('generatePhysical'),
+    themeSlug: slug,
+    count: z.number().int().min(1).max(60),
+  }),
   z.object({ action: z.literal('declineItem'), itemId: id }),
   z.object({
     action: z.literal('confirmItems'),

@@ -635,3 +635,41 @@ test('v2 opening sequence: swipe, short swipe, keyboard, tap fallback, reduced m
   expect(snap.items.every((i: { payment_mode: string }) => i.payment_mode === 'demo')).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test('v2 add more by QR: admin sheet, manual code, photo, duplicate, taken, direct link, logged out', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await login(page, 'admin');
+  await page.goto('/admin/qr-sheet');
+  await page.getByRole('button', { name: 'Generate codes' }).click();
+  await expect(page.locator('.qr-grid li')).toHaveCount(20);
+  await expect(page.getByRole('img', { name: /^QR code for Nova Scout #001 \/ 100$/ })).toBeVisible();
+  const codes = await page.locator('.qr-grid code').allInnerTexts();
+  await login(page, 'collector');
+  await page.goto('/collection');
+  await page.getByRole('button', { name: 'Add more' }).click();
+  await page.getByRole('button', { name: 'Enter code manually' }).click();
+  await page.locator('input[name="figureCode"]').fill('not-a-code');
+  await page.getByRole('button', { name: 'Add figure' }).click();
+  await expect(page.getByText('That code isn’t a LoopBox figure code. Check it and try again.')).toBeVisible();
+  await page.locator('input[name="figureCode"]').fill(codes[0].toLowerCase());
+  await page.getByRole('button', { name: 'Add figure' }).click();
+  await expect(page.getByText(/Verified physical · #001 \/ 100/)).toBeVisible();
+  await page.getByRole('button', { name: 'Show my collection' }).click();
+  await expect(page.getByText('Verified physical', { exact: true })).toHaveCount(1);
+  // Direct link from a phone camera: already mine, then someone else's, then a fresh one.
+  await page.goto('/claim/' + codes[0]);
+  await expect(page.getByRole('heading', { name: 'Already in your collection.' })).toBeVisible();
+  await login(page, 'demo-0');
+  await page.goto('/claim/' + codes[0]);
+  await expect(page.getByRole('heading', { name: 'Someone already added this figure.' })).toBeVisible();
+  await page.goto('/claim/' + codes[1]);
+  await expect(page.getByText(/Verified physical ·/)).toBeVisible();
+  await page.context().clearCookies();
+  await page.goto('/claim/' + codes[2]);
+  await expect(page.getByRole('heading', { name: 'Sign in to add this figure.' })).toBeVisible();
+  await noOverflow(page);
+  expect(errors).toEqual([]);
+});
