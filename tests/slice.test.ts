@@ -3,7 +3,10 @@ import { splitAlong, validSlice } from '../src/lib/slice';
 
 const rect = { left: 100, top: 100, right: 300, bottom: 380, width: 200 };
 const line = (x0: number, y0: number, x1: number, y1: number, n = 20) =>
-  Array.from({ length: n + 1 }, (_, i) => ({ x: x0 + ((x1 - x0) * i) / n, y: y0 + ((y1 - y0) * i) / n }));
+  Array.from({ length: n + 1 }, (_, i) => ({
+    x: x0 + ((x1 - x0) * i) / n,
+    y: y0 + ((y1 - y0) * i) / n,
+  }));
 
 describe('swipe to tear', () => {
   it('accepts one stroke that enters, crosses at least 60% of the width and leaves', () => {

@@ -236,7 +236,9 @@ function MatchCard({ match: m }: { match: Match }) {
   return (
     <section className="match" aria-labelledby={'match-' + m.id}>
       <h2 id={'match-' + m.id}>Two kin. Two happy collectors.</h2>
-      <p className="match-sub">You matched with {m.partner}. Both boxes are held until you decide.</p>
+      <p className="match-sub">
+        You matched with {m.partner}. Both boxes are held until you decide.
+      </p>
       <div className="match-cards">
         <div className="card mcard">
           <span className="mcard-label">You give</span>

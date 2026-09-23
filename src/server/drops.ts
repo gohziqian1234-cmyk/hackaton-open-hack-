@@ -77,9 +77,11 @@ export class Drops extends Market {
       ).map((c) => [c.id, c]),
     );
     const mixes = new Map<string, ThemeInfo['mix']>();
-    for (const r of this.all<{ campaign_id: string; rarity: 'COMMON' | 'RARE' | 'SECRET'; n: number }>(
-      'SELECT campaign_id,rarity,COUNT(*) AS n FROM characters GROUP BY campaign_id,rarity',
-    )) {
+    for (const r of this.all<{
+      campaign_id: string;
+      rarity: 'COMMON' | 'RARE' | 'SECRET';
+      n: number;
+    }>('SELECT campaign_id,rarity,COUNT(*) AS n FROM characters GROUP BY campaign_id,rarity')) {
       const mix = mixes.get(r.campaign_id) ?? { COMMON: 0, RARE: 0, SECRET: 0 };
       mix[r.rarity] = r.n;
       mixes.set(r.campaign_id, mix);
@@ -120,26 +122,24 @@ export class Drops extends Market {
       },
     );
     // Partner campaigns published through the portal appear after the seeded themes.
-    const partnerDrops = [...campaigns.values()].map(
-      (c, i): ThemeInfo => ({
-        slug: c.id,
-        name: c.name,
-        status: 'live',
-        payment_mode: 'stripe',
-        licensed: false,
-        sort_order: 1000 + i,
-        tagline: c.partner ? `A drop by ${c.partner}.` : 'A partner drop.',
-        description: c.description,
-        accent: PARTNER_ACCENT,
-        accent_secondary: null,
-        cover: null,
-        campaign_id: c.id,
-        closes_at: c.ends_at,
-        slot_hold_minutes: 15,
-        reservation_minutes: 30,
-        ...fromCampaign(c),
-      }),
-    );
+    const partnerDrops = [...campaigns.values()].map((c, i): ThemeInfo => ({
+      slug: c.id,
+      name: c.name,
+      status: 'live',
+      payment_mode: 'stripe',
+      licensed: false,
+      sort_order: 1000 + i,
+      tagline: c.partner ? `A drop by ${c.partner}.` : 'A partner drop.',
+      description: c.description,
+      accent: PARTNER_ACCENT,
+      accent_secondary: null,
+      cover: null,
+      campaign_id: c.id,
+      closes_at: c.ends_at,
+      slot_hold_minutes: 15,
+      reservation_minutes: 30,
+      ...fromCampaign(c),
+    }));
     return [...themed, ...partnerDrops];
   }
   /** The theme card for a slug or a campaign id, or null. */
@@ -152,7 +152,10 @@ export class Drops extends Market {
   /** "Notify me" on a coming-soon theme. Idempotent per user and theme. */
   notifyTheme(userId: string, slug: string) {
     this.user(userId);
-    const t = this.one<{ id: string; status: string }>('SELECT id,status FROM themes WHERE slug=?', slug);
+    const t = this.one<{ id: string; status: string }>(
+      'SELECT id,status FROM themes WHERE slug=?',
+      slug,
+    );
     if (!t) throw new DomainError('NOT_FOUND', 404);
     if (t.status !== 'coming_soon') throw new DomainError('INVALID_STATE');
     this.run(
@@ -227,7 +230,8 @@ export class Drops extends Market {
       try {
         batch = createBatch(this.db, themeSlug, count, origin, this.now());
       } catch (e) {
-        if (e instanceof Error && e.message === 'NOT_FOUND') throw new DomainError('NOT_FOUND', 404);
+        if (e instanceof Error && e.message === 'NOT_FOUND')
+          throw new DomainError('NOT_FOUND', 404);
         throw e;
       }
       this.audit(adminId, 'physical.generated', 'theme', themeSlug, { count: batch.length });
@@ -262,10 +266,10 @@ export class Drops extends Market {
         c.id,
       );
       if (!unit) throw new DomainError('SOLD_OUT');
-      const theme = this.one<{ reservation_minutes: number; payment_mode: 'stripe' | 'demo' | null }>(
-        'SELECT reservation_minutes,payment_mode FROM themes WHERE campaign_id=?',
-        c.id,
-      );
+      const theme = this.one<{
+        reservation_minutes: number;
+        payment_mode: 'stripe' | 'demo' | null;
+      }>('SELECT reservation_minutes,payment_mode FROM themes WHERE campaign_id=?', c.id);
       const id = randomUUID();
       this.run(
         "INSERT INTO order_items (id,user_id,campaign_id,access_id,pool_unit_id,character_id,state,slot_won_at,opened_at,reserved_until,payment_mode,created_at) VALUES (?,?,?,?,?,?,'opened',?,?,?,?,?)",
@@ -282,7 +286,10 @@ export class Drops extends Market {
         this.now(),
       );
       this.run("UPDATE access SET status='REDEEMED' WHERE id=?", a.id);
-      this.audit(userId, 'item.opened', 'order_item', id, { campaign: c.id, position: unit.position });
+      this.audit(userId, 'item.opened', 'order_item', id, {
+        campaign: c.id,
+        position: unit.position,
+      });
       return {
         ...this.item(userId, id),
         character: this.one<CharacterInfo>(
@@ -309,7 +316,11 @@ export class Drops extends Market {
     ).map((r) => ({ ...r, pending: !!r.pending }));
   }
   private ownItem(userId: string, itemId: string) {
-    const i = this.one<ItemRow>('SELECT * FROM order_items WHERE id=? AND user_id=?', itemId, userId);
+    const i = this.one<ItemRow>(
+      'SELECT * FROM order_items WHERE id=? AND user_id=?',
+      itemId,
+      userId,
+    );
     if (!i) throw new DomainError('NOT_FOUND', 404);
     return i;
   }
@@ -434,7 +445,10 @@ export class Drops extends Market {
       return { basketId, confirmed: plan.confirmed, simulated: true, orderIds };
     const first = plan.cardOrders[0];
     try {
-      const byCampaign = new Map<string, { name: string; unitAmountCents: number; quantity: number }>();
+      const byCampaign = new Map<
+        string,
+        { name: string; unitAmountCents: number; quantity: number }
+      >();
       for (const o of plan.cardOrders) {
         const line = byCampaign.get(o.item.campaign_id) ?? {
           name: o.name + ' figure (made to order)',

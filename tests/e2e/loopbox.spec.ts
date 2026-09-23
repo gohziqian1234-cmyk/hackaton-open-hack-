@@ -77,10 +77,16 @@ test('golden path: quest, preorder, reveal, direct trade, final production', asy
   await page.getByRole('checkbox', { name: 'I am 18 or older' }).check();
   await page.screenshot({ path: resolve(screenshotDir, '03-checkout.png'), fullPage: true });
   await page.getByRole('button', { name: 'Checkout', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Are you sure you want these made?' })).toBeVisible();
-  await page.getByRole('checkbox', { name: 'I understand these figures will be made just for me.' }).check();
+  await expect(
+    page.getByRole('heading', { name: 'Are you sure you want these made?' }),
+  ).toBeVisible();
+  await page
+    .getByRole('checkbox', { name: 'I understand these figures will be made just for me.' })
+    .check();
   await page.getByRole('button', { name: 'Yes, confirm & pay' }).click();
-  await expect(page.getByRole('heading', { name: 'Confirmed. You’re on the production list.' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Confirmed. You’re on the production list.' }),
+  ).toBeVisible();
   await page.getByRole('link', { name: 'Find a trade', exact: true }).click();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Find my match' }).click();
@@ -600,7 +606,9 @@ test('v2 opening sequence: swipe, short swipe, keyboard, tap fallback, reduced m
   await page.mouse.move(box.x + box.width + 30, box.y + box.height * 0.55, { steps: 14 });
   await page.mouse.up();
   await expect(page.getByRole('heading', { name: naruto })).toBeVisible();
-  await expect(page.getByText('Concept partner drop — demo only, not licensed').first()).toBeVisible();
+  await expect(
+    page.getByText('Concept partner drop — demo only, not licensed').first(),
+  ).toBeVisible();
   // 2. Keyboard: Enter opens the box, Enter tears the pack.
   await page.goto('/open/' + (await win('edgerunners')));
   await expect(page.getByRole('button', { name: 'Open my box' })).toBeFocused();
@@ -624,13 +632,21 @@ test('v2 opening sequence: swipe, short swipe, keyboard, tap fallback, reduced m
   await expect(page.getByRole('checkbox', { name: /^Select / })).toHaveCount(4);
   await page.getByRole('checkbox', { name: 'I am 18 or older' }).check();
   await page.getByRole('button', { name: 'Checkout', exact: true }).click();
-  await page.getByRole('checkbox', { name: 'I understand these figures will be made just for me.' }).check();
+  await page
+    .getByRole('checkbox', { name: 'I understand these figures will be made just for me.' })
+    .check();
   await page.getByRole('button', { name: 'Yes, confirm & pay' }).click();
   await expect(page.getByRole('heading', { name: 'Demo payment' })).toBeVisible();
   await expect(page.getByText('This is a concept drop. No money is charged.')).toBeVisible();
   await page.getByRole('button', { name: 'Complete demo payment' }).click();
-  await expect(page.getByRole('heading', { name: 'Confirmed. You’re on the production list.' })).toBeVisible();
-  await expect(page.getByRole('img', { name: /figure from (Naruto|Cyberpunk: Edgerunners) \(concept render\)$/ })).toHaveCount(4);
+  await expect(
+    page.getByRole('heading', { name: 'Confirmed. You’re on the production list.' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('img', {
+      name: /figure from (Naruto|Cyberpunk: Edgerunners) \(concept render\)$/,
+    }),
+  ).toHaveCount(4);
   const snap = await snapshot(page);
   expect(snap.items.filter((i: { state: string }) => i.state === 'confirmed')).toHaveLength(4);
   expect(snap.items.every((i: { payment_mode: string }) => i.payment_mode === 'demo')).toBe(true);
@@ -646,7 +662,9 @@ test('v2 add more by QR: admin sheet, manual code, photo, duplicate, taken, dire
   await page.goto('/admin/qr-sheet');
   await page.getByRole('button', { name: 'Generate codes' }).click();
   await expect(page.locator('.qr-grid li')).toHaveCount(20);
-  await expect(page.getByRole('img', { name: /^QR code for Nova Scout #001 \/ 100$/ })).toBeVisible();
+  await expect(
+    page.getByRole('img', { name: /^QR code for Nova Scout #001 \/ 100$/ }),
+  ).toBeVisible();
   const codes = await page.locator('.qr-grid code').allInnerTexts();
   await login(page, 'collector');
   await page.goto('/collection');
@@ -654,7 +672,9 @@ test('v2 add more by QR: admin sheet, manual code, photo, duplicate, taken, dire
   await page.getByRole('button', { name: 'Enter code manually' }).click();
   await page.locator('input[name="figureCode"]').fill('not-a-code');
   await page.getByRole('button', { name: 'Add figure' }).click();
-  await expect(page.getByText('That code isn’t a LoopBox figure code. Check it and try again.')).toBeVisible();
+  await expect(
+    page.getByText('That code isn’t a LoopBox figure code. Check it and try again.'),
+  ).toBeVisible();
   await page.locator('input[name="figureCode"]').fill(codes[0].toLowerCase());
   await page.getByRole('button', { name: 'Add figure' }).click();
   await expect(page.getByText(/Verified physical · #001 \/ 100/)).toBeVisible();
@@ -665,7 +685,9 @@ test('v2 add more by QR: admin sheet, manual code, photo, duplicate, taken, dire
   await expect(page.getByRole('heading', { name: 'Already in your collection.' })).toBeVisible();
   await login(page, 'demo-0');
   await page.goto('/claim/' + codes[0]);
-  await expect(page.getByRole('heading', { name: 'Someone already added this figure.' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Someone already added this figure.' }),
+  ).toBeVisible();
   await page.goto('/claim/' + codes[1]);
   await expect(page.getByText(/Verified physical ·/)).toBeVisible();
   await page.context().clearCookies();

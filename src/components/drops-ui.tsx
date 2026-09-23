@@ -62,7 +62,11 @@ export function AbstractArt({ theme, className = '' }: { theme: ThemeInfo; class
 /** Astral Kin has no photo: its cover is composed from its own drawn kin and box. */
 function OriginalCover({ theme }: { theme: ThemeInfo }) {
   return (
-    <div className="original-cover" style={{ ['--art-accent' as string]: theme.accent }} aria-hidden="true">
+    <div
+      className="original-cover"
+      style={{ ['--art-accent' as string]: theme.accent }}
+      aria-hidden="true"
+    >
       <BoxArt className="oc-box" />
       <KinArt id="tide" className="oc-kin oc-a" />
       <KinArt id="eclipse" className="oc-kin oc-b" />

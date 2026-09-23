@@ -205,7 +205,11 @@ export interface Verification {
   sold: number;
   seed?: string;
   order?: string[];
-  serverCheck?: { recomputedCommitment: string; orderMatches: boolean; fingerprintMatches: boolean };
+  serverCheck?: {
+    recomputedCommitment: string;
+    orderMatches: boolean;
+    fingerprintMatches: boolean;
+  };
 }
 export interface PhysicalFigure {
   id: string;

@@ -159,7 +159,12 @@ function BoxReveal({ draws, onDone }: { draws: OrderView['draws']; onDone: () =>
       </p>
       <div className="reveal-stage">
         <div className="burst" aria-hidden="true" />
-        <CharacterTile name={current.name} color={current.color} rarity={current.rarity} className="reveal-kin" />
+        <CharacterTile
+          name={current.name}
+          color={current.color}
+          rarity={current.rarity}
+          className="reveal-kin"
+        />
         <div className="halves" aria-hidden="true">
           <div className="half l">
             <BoxArt />

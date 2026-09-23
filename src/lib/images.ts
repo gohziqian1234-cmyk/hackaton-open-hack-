@@ -11,7 +11,10 @@ export type ThemeImage = {
   kind: 'image' | 'original' | 'placeholder';
 };
 type Entry = { path: string; width: number; height: number };
-const images = manifest as unknown as Record<string, Partial<Record<ImageVariant | 'cover', Entry>>>;
+const images = manifest as unknown as Record<
+  string,
+  Partial<Record<ImageVariant | 'cover', Entry>>
+>;
 
 /** Themes that ship their own illustrated characters instead of image files. */
 const ORIGINAL_ART = new Set(['astral-kin']);

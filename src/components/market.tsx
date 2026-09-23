@@ -69,7 +69,11 @@ export const fulfilmentLabel = {
 /** Demo policy (assumption, founder to confirm): sellers hand over within this many days of payment. */
 export const HANDOVER_DAYS = 3;
 export const shipLine = (f: 'SHIP' | 'MEETUP' | 'BOTH') =>
-  (f === 'MEETUP' ? 'Meet-up within ' : f === 'BOTH' ? 'Ships or meet-up within ' : 'Ships within ') +
+  (f === 'MEETUP'
+    ? 'Meet-up within '
+    : f === 'BOTH'
+      ? 'Ships or meet-up within '
+      : 'Ships within ') +
   HANDOVER_DAYS +
   ' days';
 
@@ -314,7 +318,9 @@ export function MarketBrowse() {
           <select
             name="sort"
             value={filters.sort || 'new'}
-            onChange={(e) => setFilters({ ...filters, sort: e.target.value === 'new' ? '' : e.target.value })}
+            onChange={(e) =>
+              setFilters({ ...filters, sort: e.target.value === 'new' ? '' : e.target.value })
+            }
           >
             {SORTS.map((o) => (
               <option key={o.id} value={o.id}>

@@ -382,9 +382,21 @@ LAST GREEN TAG:
 
 ## 24. Protected strings (Playwright depends on them — keep the exact accessible names)
 
-Headings: contains "A little mystery"; "Astral Kin™"; "Quest cleared."; "Eclipse Knight"; "Two kin. Two happy collectors."; "Aurora Warden"; "Demand, before making."; "Ready to make.".
-Links: "Explore the drop"; "Claim preorder slot"; "Find a trade"; "See my updated collection"; "Trade room".
-Buttons: "Play to unlock"; "Untimed lore challenge" (regex); "Start lore challenge"; "Start quest"; "Pause quest"; "Resume"; "Open my box"; "Save card"; "Find my match"; "Accept exchange"; "Advance campaign"; "Confirm phase change"; "Edit campaign"; "Save campaign"; "Sold out · Join waitlist"; "You’re on the waitlist"; "Open menu"; regex "Demo collector".
+v2 redesign (loopbox-v2-kit brief, which the human asked us to follow) replaced: heading "A little mystery" → "Collect the surprise"; link "Explore the drop" → "Explore the drops"; button "Pay with card" → "Checkout" + "Yes, confirm & pay"; heading "Blind boxes, made by collectors." → "Marketplace". The list below is updated accordingly.
+
+Headings: contains "Collect the surprise"; "Drops"; "Checkout"; "Are you sure you want these made?"; "Confirmed. You’re on the production list."; "Marketplace"; "Astral Kin™"; "Quest cleared."; "Eclipse Knight"; "Two kin. Two happy collectors."; "Aurora Warden"; "Demand, before making."; "Ready to make.".
+Links: "Explore the drops"; "Claim preorder slot"; "Keep it — go to checkout"; "Find a trade"; "See my updated collection"; "Trade room".
+Buttons: "Play to unlock"; "Untimed lore challenge" (regex); "Start lore challenge"; "Start quest"; "Pause quest"; "Resume"; "Open my box"; "Skip"; "Tap here to tear instead"; "Tear open"; "Checkout"; "Yes, confirm & pay"; "Complete demo payment"; "Add more"; "Enter code manually"; "Add figure"; "Generate codes"; "Save card"; "Find my match"; "Accept exchange"; "Advance campaign"; "Confirm phase change"; "Edit campaign"; "Save campaign"; "Sold out · Join waitlist"; "You’re on the waitlist"; "Open menu"; regex "Demo collector".
 Text: "7 remaining"; regex "You have a duplicate"; "Exchange complete.".
 Selectors: `.countdown`, `.fragment`, `input[name="nova"]`, `input[name="price"]`, `main h1`, `canvas`, role `img` named "Eclipse Knight collectible", role `dialog`, role `checkbox`.
-M5 will replace "Confirm demo preorder" with the Stripe flow; update that ONE e2e step to the new button "Pay with card" in the same commit and report it.
+M5 will replace "Confirm demo preorder" with the Stripe flow; update that ONE e2e step to the new button "Pay with card" in the same commit and report it. (Superseded by v2: payment now happens after opening, on /checkout.)
+
+## 25. v2 redesign (loopbox-v2-kit) — what changed in the rules above
+
+Details and file map: `docs/REDESIGN_NOTES.md`. Rule changes, stated plainly:
+
+- **B2C order of events** (supersedes the Order/Slot parts of §6 for the collector UI): slot won (`access` AVAILABLE) → **opened** (`order_items`: the draw takes the lowest free pool position, same algorithm as §8, and holds it for the theme's `reservation_minutes`, default 30) → **confirmed** (paid: an `orders` row + allocation of exactly that held unit) → `in_production` → `shipped`; side exits **declined** (collector returns it) and **expired** (reservation ran out or preorder closed). A slot opens once (`order_items.access_id` UNIQUE): declining never re-draws. The per-person max counts slots won, including declined and expired ones. The legacy pay-first `checkout`/`preorder` actions still work for the API tests.
+- **Invariant 1** now counts opened, unpaid items as claimed too (they hold a unit); a held unit can't be drawn again (partial unique index on `order_items.pool_unit_id`).
+- **Themes**: `themes` table seeded from `src/data/themes.seed.json`; live themes are campaigns. Licensed concept themes (Naruto, Cyberpunk: Edgerunners) always show "Concept partner drop — demo only, not licensed" (and "Concept render" under hero/poster images) and use a **demo payment** that never reaches Stripe. The §18 ban on the word "licensed" does not cover this required disclaimer.
+- **Physical figures**: `physical_items`, claimable once by a 128-bit code stored only as SHA-256. `Permissions-Policy` allows `camera=(self)` for the scanner.
+- **Packages added** (named in the v2 brief): `qrcode` (+ `@types/qrcode`) for QR images, `jsqr` for decoding.

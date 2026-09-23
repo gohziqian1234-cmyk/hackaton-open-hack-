@@ -613,8 +613,8 @@ export class Loopbox {
           if (refunded.length) {
             const amounts = refunded.map(
               (x) =>
-                this.one<{ amount: number }>('SELECT amount FROM orders WHERE id=?', x.id)?.amount ??
-                0,
+                this.one<{ amount: number }>('SELECT amount FROM orders WHERE id=?', x.id)
+                  ?.amount ?? 0,
             );
             result = {
               outcome: 'refund',

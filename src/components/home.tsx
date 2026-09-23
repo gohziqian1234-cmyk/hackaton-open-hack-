@@ -26,10 +26,22 @@ import type { Snapshot, ThemeInfo } from '../lib/types';
 const steps = [
   { title: 'Play', copy: 'A short themed quest. Free for everyone.', icon: Gamepad2 },
   { title: 'Unlock', copy: 'Win one preorder slot, held for 15 minutes.', icon: KeyRound },
-  { title: 'Open', copy: 'Open a digital blind box drawn from a published shuffle.', icon: PackageOpen },
+  {
+    title: 'Open',
+    copy: 'Open a digital blind box drawn from a published shuffle.',
+    icon: PackageOpen,
+  },
   { title: 'Trade', copy: 'Swap a pull you don’t want for one of the same rarity.', icon: Repeat2 },
-  { title: 'Confirm & pay', copy: 'Tell us you want it made, then pay at checkout.', icon: CreditCard },
-  { title: 'We produce', copy: 'Only confirmed figures are 3D-printed and shipped.', icon: Factory },
+  {
+    title: 'Confirm & pay',
+    copy: 'Tell us you want it made, then pay at checkout.',
+    icon: CreditCard,
+  },
+  {
+    title: 'We produce',
+    copy: 'Only confirmed figures are 3D-printed and shipped.',
+    icon: Factory,
+  },
 ];
 
 /** Where the signed-in collector is in the six steps, or -1 when signed out. */

@@ -32,7 +32,9 @@ function ThemeCard({ theme, now }: { theme: ThemeInfo; now: number }) {
       >
         <div className="tc-media">
           <ThemeCover theme={theme} />
-          <span className={live ? 'tc-tag live' : 'tc-tag soon'}>{live ? 'Live' : 'Coming soon'}</span>
+          <span className={live ? 'tc-tag live' : 'tc-tag soon'}>
+            {live ? 'Live' : 'Coming soon'}
+          </span>
           <span className="tc-corner">
             {live ? (
               <span className="dot-accent tabular">{left} left</span>
@@ -46,7 +48,9 @@ function ThemeCard({ theme, now }: { theme: ThemeInfo; now: number }) {
         <div className="tc-body">
           <ConceptBadge theme={theme} compact />
           <h2 className="tc-title">{theme.name}</h2>
-          <p className="tc-desc">{live ? theme.description : `${theme.tagline} ${theme.description}`}</p>
+          <p className="tc-desc">
+            {live ? theme.description : `${theme.tagline} ${theme.description}`}
+          </p>
           <ul className="chips" aria-label="Drop details">
             {live ? (
               <>
@@ -265,7 +269,10 @@ function Lineup({
         const hidden = ch.rarity === 'SECRET' && !ch.pulled;
         const pct = odds(ch.units, c.capacity);
         return (
-          <li key={ch.id} className={'lu ' + ch.rarity.toLowerCase() + (hidden ? ' is-hidden' : '')}>
+          <li
+            key={ch.id}
+            className={'lu ' + ch.rarity.toLowerCase() + (hidden ? ' is-hidden' : '')}
+          >
             <button
               type="button"
               className="lu-media"
@@ -319,10 +326,7 @@ function DropDetail({ theme, campaignId }: { theme: ThemeInfo; campaignId: strin
     router.push(access ? '/open/' + access.id : '/quest' + query);
   };
   return (
-    <section
-      className="wrap drop drop-v2"
-      style={{ ['--theme-accent' as string]: theme.accent }}
-    >
+    <section className="wrap drop drop-v2" style={{ ['--theme-accent' as string]: theme.accent }}>
       <div className="drop-glow" aria-hidden="true" />
       <div className="drop-main">
         <Link className="back-link" href="/drops">

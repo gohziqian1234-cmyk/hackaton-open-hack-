@@ -77,9 +77,7 @@ export function OpenSlot() {
         requestDraw={requestDraw}
         startAt={item && !opened ? 'reveal' : 'box'}
         animateReveal={!item || !!opened}
-        keepHref={
-          waiting ? '/checkout' + (itemId ? '?select=' + itemId : '') : '/collection'
-        }
+        keepHref={waiting ? '/checkout' + (itemId ? '?select=' + itemId : '') : '/collection'}
         keepLabel={waiting ? 'Keep it — go to checkout' : 'See my collection'}
         tradeHref={waiting ? '/trades' + (itemId ? '?item=' + itemId : '') : undefined}
       >

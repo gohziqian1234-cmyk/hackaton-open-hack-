@@ -128,6 +128,7 @@ export function OpeningSequence({
   const canvas = useRef<HTMLCanvasElement>(null);
   const pack = useRef<HTMLDivElement>(null);
   const boxButton = useRef<HTMLButtonElement>(null);
+  const keyboard = useRef(false);
   const stroke = useRef<Pt[]>([]);
   const drawing = useRef(false);
   const particles = useRef<Particle[]>([]);
@@ -161,7 +162,8 @@ export function OpeningSequence({
   }, []);
   useEffect(() => {
     if (stage === 'box') boxButton.current?.focus({ preventScroll: true });
-    if (stage === 'pack') pack.current?.focus({ preventScroll: true });
+    // Keyboard users land on the pack; pointer users don't get a focus ring on it.
+    if (stage === 'pack' && keyboard.current) pack.current?.focus({ preventScroll: true });
   }, [stage]);
   useEffect(() => {
     // Full-screen moment: hide the site chrome behind it (also from keyboard and screen readers).
@@ -294,8 +296,10 @@ export function OpeningSequence({
     [burst, onComplete, play, reduced],
   );
 
-  const tapBox = async () => {
+  const tapBox = async (e: React.MouseEvent) => {
     if (stage !== 'box') return;
+    // detail is 0 when Enter or Space activated the button.
+    keyboard.current = e.detail === 0;
     play('tap');
     const c = await ensureCharacter();
     if (!c) return;

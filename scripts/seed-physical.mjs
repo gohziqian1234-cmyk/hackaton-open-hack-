@@ -12,13 +12,23 @@ const { createDatabase } = await import('../src/server/db.ts');
 const { createBatch } = await import('../src/server/physical.ts');
 const { serialLabel } = await import('../src/lib/format.ts');
 
-const origin = (process.env.NEXT_PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || 'http://127.0.0.1:3000').replace(/\/+$/, '');
+const origin = (
+  process.env.NEXT_PUBLIC_APP_URL ||
+  process.env.RENDER_EXTERNAL_URL ||
+  'http://127.0.0.1:3000'
+).replace(/\/+$/, '');
 const count = Math.max(1, Math.min(200, Number(process.env.PHYSICAL_COUNT) || 20));
 const db = createDatabase(process.env.LOOPBOX_DB || 'data/loopbox.sqlite');
 const themes = db
-  .prepare("SELECT slug,name FROM themes WHERE status='live' AND campaign_id IS NOT NULL ORDER BY sort_order")
+  .prepare(
+    "SELECT slug,name FROM themes WHERE status='live' AND campaign_id IS NOT NULL ORDER BY sort_order",
+  )
   .all();
-const escape = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const escape = (s) =>
+  String(s).replace(
+    /[&<>"]/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c],
+  );
 const cells = [];
 db.exec('BEGIN IMMEDIATE');
 try {
@@ -26,9 +36,17 @@ try {
     const batch = createBatch(db, t.slug, count, origin, Date.now());
     console.log(`\n${t.name} — ${batch.length} codes`);
     for (const b of batch) {
-      console.log(`  ${b.character.padEnd(18)} ${serialLabel(b.serial_no, b.cap).padEnd(10)} ${b.code}  ${b.url}`);
-      const svg = await QRCode.toString(b.url, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
-      cells.push(`<li>${svg}<strong>${escape(b.character)}</strong><span>${escape(serialLabel(b.serial_no, b.cap))} · ${escape(t.name)}</span><code>${b.code}</code></li>`);
+      console.log(
+        `  ${b.character.padEnd(18)} ${serialLabel(b.serial_no, b.cap).padEnd(10)} ${b.code}  ${b.url}`,
+      );
+      const svg = await QRCode.toString(b.url, {
+        type: 'svg',
+        margin: 1,
+        errorCorrectionLevel: 'M',
+      });
+      cells.push(
+        `<li>${svg}<strong>${escape(b.character)}</strong><span>${escape(serialLabel(b.serial_no, b.cap))} · ${escape(t.name)}</span><code>${b.code}</code></li>`,
+      );
     }
   }
   db.exec('COMMIT');

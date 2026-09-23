@@ -1,8 +1,8 @@
 # LoopBox
 
-**A little mystery. A better way to collect.** LoopBox sells limited blind-box collectibles made to confirmed demand. Collectors win a free game to unlock a preorder slot, pay, open a digital box whose contents were fixed by a published shuffle, and can swap duplicates inside the same rarity before anything is manufactured. Brands and creator collectives launch their own drops, and collectors can sell their own series in a marketplace.
+**Collect the surprise. Produce only what's wanted.** LoopBox sells limited blind-box collectibles made to confirmed demand. Collectors win a free game to unlock a preorder slot, open a digital blind box drawn from a published shuffle, can swap duplicates inside the same rarity, and confirm and pay at checkout — only confirmed figures are 3D-printed. Brands and creator collectives launch their own drops, and collectors can sell their own series in a marketplace.
 
-This is a **single-host hackathon prototype** (NYP Open Hack) with fictional original characters. Payments run in **Stripe test mode** or are simulated. It is not a live store and takes no real money.
+This is a **single-host hackathon prototype** (NYP Open Hack). Astral Kin is our original series. **Naruto** and **Cyberpunk: Edgerunners** are **concept partner drops for the pitch only**: the team holds no licence for them, every screen that shows them says "Concept partner drop — demo only, not licensed" and "Concept render", and they use a demo payment that charges nothing. Astral Kin payments run in **Stripe test mode** or are simulated. It is not a live store and takes no real money. v2 redesign notes: [docs/REDESIGN_NOTES.md](./docs/REDESIGN_NOTES.md).
 
 ![LoopBox desktop home screen](./preview/home.png)
 
@@ -12,7 +12,7 @@ Blind-box drops sell out to bots in seconds, and factories guess demand months a
 
 ## Solution: one system, three models
 
-**B2C limited drop.** A campaign has a hard cap (Astral Kin: 100 boxes, S$18.90 each, at most 2 per collector). Collectors play a short free game (a 30-second fragment run, or an untimed lore challenge) to earn one 15-minute preorder slot, then pay with Stripe Checkout. Each paid order takes the next box from a shuffle that was fingerprinted before sales opened. The reveal shows the character; duplicates can be swapped for another character of the same rarity until allocations lock. The manufacturing manifest counts only paid boxes.
+**B2C limited drop.** A campaign has a hard cap (Astral Kin: 100 boxes, S$18.90 each, at most 2 per collector). Collectors play a short free game (a 30-second fragment run, or an untimed lore challenge) to earn one 15-minute slot. Opening the slot draws the next box of a shuffle that was fingerprinted before sales opened and holds it for 30 minutes; the animated opening only plays after the server has drawn. At **Checkout** the collector confirms ("Are you sure you want these made?") and pays — Stripe Checkout for Astral Kin, a demo payment for concept drops — or declines, which returns the figure to the pool without a re-draw. Confirmed figures can be swapped for another of the same rarity until allocations lock. The manufacturing manifest counts only paid boxes. Owners of physical figures can add them to My collection by scanning the QR code on the figure.
 
 **B2B partner portal.** A brand collaborator or creator collective applies with proof that it owns its characters. An admin approves; the partner drafts a campaign (price, cap, dates, game, 2–8 characters whose box counts must add up to the cap) and submits it. The admin publishes it, which builds and fingerprints its shuffle. The partner dashboard shows plays, wins, paid boxes, sell-through, trades, revenue and the partner's share, and downloads the manifest.
 
@@ -26,7 +26,7 @@ Blind-box drops sell out to bots in seconds, and factories guess demand months a
 | API      | `/api/loopbox` action endpoint (Zod discriminated union) + small GET routes + `/api/stripe/*` + `/api/upload`                                                          |
 | Domain   | `src/domain/*` pure functions: fairness shuffle, C2C draw, fee, trust, metrics                                                                                         |
 | Service  | `src/server/*`: every method takes the user id first and checks role and ownership                                                                                     |
-| Database | SQLite through Node's built-in `node:sqlite`, WAL, `BEGIN IMMEDIATE` writes, CHECK constraints and triggers, forward-only migrations (`PRAGMA user_version`, 8 so far) |
+| Database | SQLite through Node's built-in `node:sqlite`, WAL, `BEGIN IMMEDIATE` writes, CHECK constraints and triggers, forward-only migrations (`PRAGMA user_version`, 12 so far) |
 | Payments | Stripe Checkout Sessions (test mode) + signed webhook; simulated webhook in demo mode                                                                                  |
 | Files    | Local disk `data/uploads/`, type decided by magic bytes                                                                                                                |
 | Jobs     | Admin "Run sweep" + lazy expiry on read (no cron)                                                                                                                      |
@@ -94,17 +94,20 @@ On an empty database the app seeds:
 - **Kopi Kaki Collective**: a draft campaign (5 characters, cap 40). **Hawker Heroes**: a submitted partner application.
 - Marketplace listings: Mei's _Tropical Treats_ (trust 96), Jun's _Night Market Cats_ (88), Priya's _Garden City Sprouts_ (100, a single rare left), and one paid Alex←Mei order with a three-message chat.
 
+- **Drops (v2):** 7 themes from `src/data/themes.seed.json` — Astral Kin, Naruto (100 boxes: Naruto Uzumaki 40, Sakura Haruno 40, Sasuke Uchiha 15, Itachi Uchiha 5) and Cyberpunk: Edgerunners (60: Rebecca 42, David Martinez 15, Lucy 3) live; Jujutsu Kaisen, Genshin Impact, Sanrio Friends and Spy × Family coming soon. `npm run seed:themes` re-applies the file (idempotent); the app also does this on every start.
+- **Physical figure codes:** none by default. `npm run seed:physical` makes 20 per live theme, prints them once and writes a printable A4 sheet to `data/`; admins can make and print a batch at `/admin/qr-sheet`.
+
 Demo identities (open **Me** → _Demo identities_, or use the top-right chip): **Alex** (collector, verified, already owns one Eclipse Knight), **Sarah (demo)** (collector, has Aurora Warden listed for trade, unverified), **Mei**, **Jun**, **Priya** (verified sellers), **Astral Studio** and **Kopi Kaki Collective** (partners), **Admin**. Real accounts can also sign up at `/login` with an email and a password.
 
 The 90-second walkthrough is in [DEMO.md](./DEMO.md).
 
 ## Payments (Stripe test mode)
 
-A box is allocated only after a signed, de-duplicated `checkout.session.completed` webhook; the success page never allocates. With no keys in demo mode, **Pay with card** runs a simulated payment through the same handler and says so on screen.
+A figure becomes an order only after a signed, de-duplicated `checkout.session.completed` webhook (one Checkout Session can pay several Astral Kin figures); the success page never confirms anything. With no keys in demo mode, **Yes, confirm & pay** runs a simulated payment through the same handler and says so on screen. Concept drops (Naruto, Cyberpunk: Edgerunners) never reach Stripe: their demo payment runs the same settle-and-allocate step in-page.
 
 For real test payments on a laptop: put `STRIPE_SECRET_KEY=sk_test_…` in `.env.local`, run `stripe listen --forward-to 127.0.0.1:3000/api/stripe/webhook`, copy the printed `whsec_…` into `STRIPE_WEBHOOK_SECRET`, restart, and pay with `4242 4242 4242 4242`, any future date, any CVC.
 
-Safety rails: an unpaid order holds its box for 31 minutes (Stripe's minimum session life is 30), then expires and the box goes back. A payment that arrives after its box was given away is refunded automatically. `MAX_CHARGE_CENTS` caps any single charge.
+Safety rails: an opened, unpaid figure is held for 30 minutes (then it returns to the pool, exactly once); a card payment in progress holds it for up to 31 minutes (Stripe's minimum session life is 30), then expires and the box goes back. A payment that arrives after its box was given away is refunded automatically. `MAX_CHARGE_CENTS` caps any single charge.
 
 ## Deploy (single host)
 
@@ -119,9 +122,10 @@ Any other host: `Dockerfile` builds a Node 24 image running `npm start` on port 
 ```bash
 npm run typecheck   # TypeScript, no errors
 npm run lint        # ESLint, 0 errors
-npm test            # Vitest: 148 tests in 14 files
+npm test            # Vitest: 173 tests in 18 files
 npm run build       # production build
-npm run test:e2e    # Playwright: 10 browser tests (set PW_CHROMIUM_PATH if Chrome isn't installed)
+npm run test:e2e    # Playwright: 12 browser tests (set PW_CHROMIUM_PATH if Chrome isn't installed)
+npm run verify:assets  # every kit image in the manifest exists under public/
 ```
 
 What they prove (counts from the last run at tag `m9-green`):
@@ -131,7 +135,9 @@ What they prove (counts from the last run at tag `m9-green`):
 - **Marketplace:** fee table (1 cent, 625, 1000, 100000); the draw never picks an empty character and matches stock shares within ±2 points over 10,000 draws; 50 parallel buys over five database connections for 5 boxes never go below zero; a seller can't buy their own listing (403 and a database CHECK); the draw log can't be edited or deleted; a chat message containing `<script>` renders as text.
 - **Authorization (`tests/authz.test.ts`):** every IDOR case in the spec (someone else's allocation, access, match, partner analytics and manifest, listing, order, chat) and every forbidden cell of the role matrix; plus a `DEMO_MODE=false` smoke test.
 - **Hardening:** request bodies are capped while streaming (a 10 MB chunked body stops after ~8 KB); the start-up config check.
-- **Browser:** the golden path (quest → pay → reveal → trade → close → manifest → verify), keyboard game with pause, 375px layout with reduced motion and no WebGL, API boundaries and role guards, 50 concurrent purchases across two processes, partner portal journey, two marketplace journeys, and every route at 390px with no sideways scroll and no axe (WCAG 2.1 A/AA) violations.
+- **v2 checkout (`tests/checkout.test.ts`):** a slot opens once; declining returns stock and never re-draws; expired items return stock exactly once; the per-person limit counts slots won (a 3rd slot is blocked after two declines); concept drops never touch Stripe; a basket pays several figures in one session; late payments for a lapsed figure are refunded.
+- **v2 themes, QR and swipe (`tests/themes.test.ts`, `tests/physical.test.ts`, `tests/slice.test.ts`):** idempotent seed with the exact Naruto and Edgerunners lineups; codes are 128-bit base32, stored as hashes only, claimable once; swipe validation and split geometry.
+- **Browser:** the golden path (quest → open → checkout → trade → close → manifest → verify), the opening sequence (swipe, short swipe, keyboard, tap fallback, reduced motion) with a concept-drop demo checkout, QR claims (admin sheet, typed code, duplicate, someone else's, direct link, logged out), keyboard game with pause, 375px layout with reduced motion and no WebGL, API boundaries and role guards, 50 concurrent purchases across two processes, partner portal journey, two marketplace journeys, and every route at 390px with no sideways scroll and no axe (WCAG 2.1 A/AA) violations.
 
 ## Security
 
@@ -161,7 +167,9 @@ Not in place (see limitations): CAPTCHA, cross-host rate limiting, real SMS/emai
 | -------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | Accounts                   | Email + password sign-up and sign-in                                             | Demo identity switcher (demo mode only)                                                      |
 | Game gate                  | Server-issued one-use sessions, server-side scoring, daily attempt limit         | "Demo: win instantly" (demo mode only); no authoritative anti-cheat                          |
-| B2C payment                | Stripe Checkout in test mode + signed webhook                                    | Simulated webhook when no keys are set (labelled on screen)                                  |
+| B2C payment                | Stripe Checkout in test mode + signed webhook (Astral Kin)                       | Simulated webhook when no keys are set (labelled on screen); concept drops use a demo payment that charges nothing |
+| Concept drops              | Draws, reservations, checkout, collection and trades work end to end            | Naruto and Cyberpunk: Edgerunners are unlicensed concept renders for the pitch               |
+| Physical figures (QR)      | One-time codes (only SHA-256 stored), camera / photo / typed claims             | No real figures are printed yet; shipping 3–4 weeks after close is an estimate               |
 | Fair allocation            | Committed shuffle, public fingerprint, in-browser verification                   | The demo campaign's seed is fixed and disclosed                                              |
 | Trades                     | Same-rarity reciprocal matching, both must accept                                | Sarah's acceptance in the scripted demo                                                      |
 | Partner portal             | Applications, approval, drafts, publish, dashboard, manifest                     | Payouts to partners                                                                          |
@@ -183,7 +191,7 @@ This prototype has **not** been reviewed by a lawyer. Before any real launch, ge
 - **Gambling Control Act 2022 (Singapore):** whether paid chance-based blind boxes and marketplace draws fall within its scope.
 - **Consumer protection (fair trading):** preorders, cancellation, refunds and late delivery.
 - **PDPA:** collection and retention of names, emails, phone numbers and age confirmations.
-- **IP and licensing:** brand collaborator drops and seller-listed series (counterfeits).
+- **IP and licensing:** brand collaborator drops and seller-listed series (counterfeits). The Naruto and Cyberpunk: Edgerunners concept drops use third-party characters without a licence; they must stay labelled demo-only and be removed or licensed before any public launch.
 - **Seller-declared stock:** liability when a seller's declared stock is wrong.
 - **Payments and escrow regulation:** holding funds for sellers until receipt.
 

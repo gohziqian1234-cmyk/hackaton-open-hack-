@@ -73,8 +73,7 @@ export function Checkout() {
   }, [data]);
   if (!data) return <Pending />;
   const payable = rows.filter((r) => !r.item.pending && r.item.reserved_until > now);
-  const isPicked = (r: Row) =>
-    picked[r.item.id] ?? (preselect ? preselect === r.item.id : true);
+  const isPicked = (r: Row) => picked[r.item.id] ?? (preselect ? preselect === r.item.id : true);
   const selected = payable.filter(isPicked);
   const demo = selected.filter((r) => r.item.payment_mode === 'demo');
   const card = selected.filter((r) => r.item.payment_mode !== 'demo');
@@ -124,7 +123,9 @@ export function Checkout() {
     <section className="wrap checkout-v2">
       <div className="co-head">
         <h1>Checkout</h1>
-        <p className="lead">Confirm the figures you want made. Nothing is produced until you confirm.</p>
+        <p className="lead">
+          Confirm the figures you want made. Nothing is produced until you confirm.
+        </p>
       </div>
       {cancelled && (
         <p className="notice" role="status">
@@ -419,7 +420,9 @@ export function BasketSuccess({ basket }: { basket: string }) {
     [timedOut, setTimedOut] = useState(false);
   const items = (data?.items ?? []).filter((i) => i.basket_id === basket);
   const done = items.length > 0 && items.every((i) => i.state !== 'opened' || !i.pending);
-  const confirmed = items.filter((i) => ['confirmed', 'in_production', 'shipped'].includes(i.state));
+  const confirmed = items.filter((i) =>
+    ['confirmed', 'in_production', 'shipped'].includes(i.state),
+  );
   useEffect(() => {
     if (done || timedOut) return;
     const timer = setInterval(() => {
@@ -460,7 +463,11 @@ export function BasketSuccess({ basket }: { basket: string }) {
         </ul>
         <ol className="prod-steps" aria-label="Production progress">
           {STEPS.map((s, i) => (
-            <li key={s} className={i === 0 ? 'is-current' : undefined} aria-current={i === 0 ? 'step' : undefined}>
+            <li
+              key={s}
+              className={i === 0 ? 'is-current' : undefined}
+              aria-current={i === 0 ? 'step' : undefined}
+            >
               <span className="node tabular">{i + 1}</span>
               {s}
             </li>
@@ -479,8 +486,8 @@ export function BasketSuccess({ basket }: { basket: string }) {
           )}
         </div>
         <p className="note">
-          Changed your mind about which one you want? Swap it for another figure of the same
-          rarity in the trade room before the preorder closes.
+          Changed your mind about which one you want? Swap it for another figure of the same rarity
+          in the trade room before the preorder closes.
         </p>
       </section>
     );
@@ -516,7 +523,12 @@ export function BasketSuccess({ basket }: { basket: string }) {
               <Button
                 variant="quiet"
                 disabled={busy}
-                onClick={() => act({ orderId: pendingOrder(data, pending.id) ?? '', kind: 'B2C' }, '/api/stripe/simulate')}
+                onClick={() =>
+                  act(
+                    { orderId: pendingOrder(data, pending.id) ?? '', kind: 'B2C' },
+                    '/api/stripe/simulate',
+                  )
+                }
               >
                 Simulate payment (demo)
               </Button>

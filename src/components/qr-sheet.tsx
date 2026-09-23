@@ -47,12 +47,12 @@ export function QrSheet() {
       <div className="qr-controls no-print">
         <h1>QR sheet</h1>
         <p className="lead">
-          Make codes for physical figures, then print this page on A4 and stick one on each
-          figure’s base or box. Each code works once.
+          Make codes for physical figures, then print this page on A4 and stick one on each figure’s
+          base or box. Each code works once.
         </p>
         <p className="notice">
-          We only keep a fingerprint of each code, so print before you leave this page. Codes
-          can’t be shown again.
+          We only keep a fingerprint of each code, so print before you leave this page. Codes can’t
+          be shown again.
         </p>
         <div className="form-row qr-form">
           <label>
@@ -94,7 +94,12 @@ export function QrSheet() {
             {rows.map((r) => (
               <li key={r.id}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={r.qr} alt={'QR code for ' + r.character + ' ' + serialLabel(r.serial_no, r.cap)} width={160} height={160} />
+                <img
+                  src={r.qr}
+                  alt={'QR code for ' + r.character + ' ' + serialLabel(r.serial_no, r.cap)}
+                  width={160}
+                  height={160}
+                />
                 <strong>{r.character}</strong>
                 <span className="tabular">{serialLabel(r.serial_no, r.cap)}</span>
                 <code>{r.code}</code>

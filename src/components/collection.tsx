@@ -93,7 +93,9 @@ export function Collection() {
         >
           <p className="verified-line">
             <BadgeCheck size={20} aria-hidden="true" /> Verified physical ·{' '}
-            <span className="tabular">{serialLabel(claimed.figure.serial_no, claimed.figure.cap)}</span>
+            <span className="tabular">
+              {serialLabel(claimed.figure.serial_no, claimed.figure.cap)}
+            </span>
           </p>
         </OpeningSequence>
       </section>
@@ -165,7 +167,8 @@ export function Collection() {
                     <Tier rarity={ch.rarity} />
                     <h2 className="h3">{ch.name}</h2>
                     <p className="status-line">
-                      {theme?.name} · <span className="tabular">{serialLabel(p.serial_no, p.cap)}</span>
+                      {theme?.name} ·{' '}
+                      <span className="tabular">{serialLabel(p.serial_no, p.cap)}</span>
                     </p>
                     <ConceptBadge theme={theme} compact />
                   </div>
@@ -191,7 +194,11 @@ export function Collection() {
                     )}
                   </div>
                   <div className="collection-body">
-                    {ch ? <Tier rarity={ch.rarity} /> : <span className="tier unopened">Sealed</span>}
+                    {ch ? (
+                      <Tier rarity={ch.rarity} />
+                    ) : (
+                      <span className="tier unopened">Sealed</span>
+                    )}
                     <h2 className="h3">{ch?.name || 'Sealed box'}</h2>
                     <p className="status-line">
                       {final && <LockKeyhole size={16} aria-hidden="true" />}

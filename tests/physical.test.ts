@@ -33,7 +33,9 @@ describe('physical figure codes', () => {
     expect(code(() => s.generatePhysical('collector', 'naruto', 20, 'https://x.test'))).toBe(
       'FORBIDDEN',
     );
-    expect(code(() => s.generatePhysical('admin', 'sanrio', 20, 'https://x.test'))).toBe('NOT_FOUND');
+    expect(code(() => s.generatePhysical('admin', 'sanrio', 20, 'https://x.test'))).toBe(
+      'NOT_FOUND',
+    );
     const batch = s.generatePhysical('admin', 'naruto', 20, 'https://x.test/');
     expect(batch).toHaveLength(20);
     const per = new Map<string, number[]>();
@@ -61,7 +63,11 @@ describe('physical figure codes', () => {
     expect(code(() => s.claimPhysical('collector', newCode()))).toBe('INVALID_CODE');
     const r = s.claimPhysical('collector', first.url);
     expect(r.character.name).toBe(first.character);
-    expect(r.figure).toMatchObject({ serial_no: first.serial_no, cap: 60, theme_slug: 'edgerunners' });
+    expect(r.figure).toMatchObject({
+      serial_no: first.serial_no,
+      cap: 60,
+      theme_slug: 'edgerunners',
+    });
     expect(code(() => s.claimPhysical('collector', first.code))).toBe('ALREADY_YOURS');
     expect(code(() => s.claimPhysical('demo-0', first.code))).toBe('ALREADY_CLAIMED');
     const snap = s.snapshot(s.user('collector'));

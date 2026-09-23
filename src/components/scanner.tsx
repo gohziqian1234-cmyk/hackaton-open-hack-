@@ -7,7 +7,12 @@ import type { CharacterInfo, PhysicalFigure } from '../lib/types';
 
 export type Claimed = { figure: PhysicalFigure; character: CharacterInfo };
 type CameraState = 'starting' | 'live' | 'denied' | 'none' | 'insecure' | 'off';
-type Decoder = (data: Uint8ClampedArray, w: number, h: number, o?: object) => { data: string } | null;
+type Decoder = (
+  data: Uint8ClampedArray,
+  w: number,
+  h: number,
+  o?: object,
+) => { data: string } | null;
 
 let decoder: Promise<Decoder> | null = null;
 /** jsQR is only downloaded when someone opens the scanner. */
@@ -207,7 +212,10 @@ export function ScannerSheet({
         )}
       </div>
       <canvas ref={canvas} hidden />
-      <p className={'scan-note' + (['denied', 'none', 'insecure'].includes(camera) ? ' warn' : '')} role="status">
+      <p
+        className={'scan-note' + (['denied', 'none', 'insecure'].includes(camera) ? ' warn' : '')}
+        role="status"
+      >
         {cameraNote[camera]}
       </p>
       {(camera === 'denied' || camera === 'none') && (

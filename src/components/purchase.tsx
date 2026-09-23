@@ -137,7 +137,12 @@ export function Reveal() {
         keepHref="/collection"
         keepLabel="Keep my kin"
       >
-        <RevealExtras data={data} theme={theme} characterId={shownId} excludeAllocation={params.id} />
+        <RevealExtras
+          data={data}
+          theme={theme}
+          characterId={shownId}
+          excludeAllocation={params.id}
+        />
       </OpeningSequence>
     </section>
   );
@@ -161,10 +166,7 @@ export function RevealExtras({
   const owned =
     data.collection.filter((a) => a.character_id === ch.id && a.id !== excludeAllocation).length +
     data.items.filter(
-      (i) =>
-        i.character_id === ch.id &&
-        i.id !== excludeItem &&
-        i.state === 'opened',
+      (i) => i.character_id === ch.id && i.id !== excludeItem && i.state === 'opened',
     ).length;
   return (
     <>
@@ -223,18 +225,16 @@ export async function downloadCard(ch: CharacterInfo, theme: ThemeInfo | null) {
   ctx.fillText(ch.name, 540, 1270);
   ctx.fillStyle = '#A9A3CF';
   ctx.font = '600 34px ' + body;
-  ctx.fillText(
-    ch.rarity.charAt(0) + ch.rarity.slice(1).toLowerCase() + ' tier',
-    540,
-    1360,
-  );
+  ctx.fillText(ch.rarity.charAt(0) + ch.rarity.slice(1).toLowerCase() + ' tier', 540, 1360);
   ctx.fillStyle = '#F2F0FF';
   ctx.font = '500 38px ' + body;
   ctx.fillText('Collect the surprise. Produce only what’s wanted.', 540, 1580);
   ctx.fillStyle = '#A9A3CF';
   ctx.font = '500 28px ' + body;
   ctx.fillText(
-    theme?.licensed ? 'Concept render — demo only, not licensed' : 'Digital collectible card from a hackathon demo',
+    theme?.licensed
+      ? 'Concept render — demo only, not licensed'
+      : 'Digital collectible card from a hackathon demo',
     540,
     1770,
   );

@@ -34,9 +34,7 @@ describe('v2 theme seed', () => {
     const db = createDatabase(':memory:');
     const lineup = (campaign: string) =>
       db
-        .prepare(
-          'SELECT slug,name,rarity,units FROM characters WHERE campaign_id=? ORDER BY rowid',
-        )
+        .prepare('SELECT slug,name,rarity,units FROM characters WHERE campaign_id=? ORDER BY rowid')
         .all(campaign);
     expect(lineup('naruto')).toEqual([
       { slug: 'naruto', name: 'Naruto Uzumaki', rarity: 'COMMON', units: 40 },
@@ -89,7 +87,9 @@ describe('v2 theme seed', () => {
   it('keeps Astral Kin characters untouched and links the theme to the astral campaign', () => {
     const db = createDatabase(':memory:');
     expect(
-      db.prepare("SELECT id,slug,units FROM characters WHERE campaign_id='astral' ORDER BY rowid").all(),
+      db
+        .prepare("SELECT id,slug,units FROM characters WHERE campaign_id='astral' ORDER BY rowid")
+        .all(),
     ).toEqual([
       { id: 'nova', slug: 'nova', units: 21 },
       { id: 'moss', slug: 'moss', units: 21 },
@@ -100,7 +100,9 @@ describe('v2 theme seed', () => {
       { id: 'void', slug: 'void', units: 2 },
     ]);
     const t = db
-      .prepare("SELECT payment_mode,is_licensed_concept,cover_image FROM themes WHERE slug='astral-kin'")
+      .prepare(
+        "SELECT payment_mode,is_licensed_concept,cover_image FROM themes WHERE slug='astral-kin'",
+      )
       .get();
     expect(t).toEqual({ payment_mode: 'stripe', is_licensed_concept: 0, cover_image: null });
   });
@@ -148,6 +150,6 @@ describe('drops browser data and notify me', () => {
     s.notifyTheme('collector', 'sanrio');
     expect(s.interest('collector')).toEqual(['sanrio']);
     expect(() => s.notifyTheme('collector', 'naruto')).toThrow('INVALID_STATE');
-    expect(() => s.notifyTheme('collector', 'pokemon')).toThrow('NOT_FOUND');
+    expect(() => s.notifyTheme('collector', 'no-such-theme')).toThrow('NOT_FOUND');
   });
 });

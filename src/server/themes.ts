@@ -62,8 +62,7 @@ function validate(t: SeedTheme) {
  */
 export function seedThemes(db: DatabaseSync, seed: ThemeSeed, now: number) {
   let created = 0;
-  const campaignExists = (id: string) =>
-    !!db.prepare('SELECT 1 FROM campaigns WHERE id=?').get(id);
+  const campaignExists = (id: string) => !!db.prepare('SELECT 1 FROM campaigns WHERE id=?').get(id);
   for (const t of seed.themes) {
     validate(t);
     let campaignId: string | null = null;
@@ -148,7 +147,10 @@ function createCampaign(db: DatabaseSync, t: SeedTheme, closesAt: number, now: n
   const insert = db.prepare(
     'INSERT INTO characters (id,campaign_id,name,rarity,weight,units,color,description,slug) VALUES (?,?,?,?,?,?,?,?,?)',
   );
-  const chars = (t.characters ?? []).map((c) => ({ id: characterId(id, c.slug), units: c.stock_total }));
+  const chars = (t.characters ?? []).map((c) => ({
+    id: characterId(id, c.slug),
+    units: c.stock_total,
+  }));
   (t.characters ?? []).forEach((c) =>
     insert.run(
       characterId(id, c.slug),

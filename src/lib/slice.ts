@@ -48,7 +48,10 @@ export function splitAlong(w: number, h: number, entry: [number, number], exit: 
   }));
 }
 /** Did this stroke cross the pack: start outside, go in, leave, and span ≥ 60% of its width? */
-export function validSlice(points: { x: number; y: number }[], r: { left: number; top: number; right: number; bottom: number; width: number }) {
+export function validSlice(
+  points: { x: number; y: number }[],
+  r: { left: number; top: number; right: number; bottom: number; width: number },
+) {
   const inRect = (p: { x: number; y: number }) =>
     p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom;
   const first = points.findIndex(inRect);
@@ -64,4 +67,3 @@ export function validSlice(points: { x: number; y: number }[], r: { left: number
     exit: [exit.x - r.left, exit.y - r.top] as [number, number],
   };
 }
-

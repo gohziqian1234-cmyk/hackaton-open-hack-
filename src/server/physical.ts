@@ -63,7 +63,9 @@ export function createBatch(
   now: number,
 ): NewPhysical[] {
   const theme = db
-    .prepare('SELECT id,campaign_id FROM themes WHERE slug=? AND status=? AND campaign_id IS NOT NULL')
+    .prepare(
+      'SELECT id,campaign_id FROM themes WHERE slug=? AND status=? AND campaign_id IS NOT NULL',
+    )
     .get(themeSlug, 'live') as { id: string; campaign_id: string } | undefined;
   if (!theme) throw new Error('NOT_FOUND');
   const cap = (

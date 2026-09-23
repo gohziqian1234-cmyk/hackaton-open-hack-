@@ -25,8 +25,7 @@ function make() {
   open.push(s);
   return { s, clock };
 }
-const win = (s: App, campaign: string, user = 'collector') =>
-  s.demoWin(user, campaign).accessId;
+const win = (s: App, campaign: string, user = 'collector') => s.demoWin(user, campaign).accessId;
 const code = (fn: () => unknown) => {
   try {
     fn();
@@ -56,7 +55,7 @@ describe('opening a slot', () => {
     expect(item.reserved_until).toBe(clock.t + 30 * 60000);
     expect(s.campaign('astral').confirmed).toBe(94);
     expect(code(() => s.openSlot('collector', accessId))).toBe('ACCESS_ALREADY_USED');
-    expect(s.one("SELECT status FROM access WHERE id=?", accessId)).toEqual({ status: 'REDEEMED' });
+    expect(s.one('SELECT status FROM access WHERE id=?', accessId)).toEqual({ status: 'REDEEMED' });
   });
 
   it('refuses another collector’s slot and another collector’s items', () => {
@@ -150,9 +149,9 @@ describe('confirm & pay', () => {
     )!;
     expect(allocation.character_id).toBe(item.character_id);
     expect(allocation.revealed).toBe(1);
-    expect(
-      s.one("SELECT status FROM payments WHERE ref_id=?", after.order_id!),
-    ).toEqual({ status: 'SIMULATED' });
+    expect(s.one('SELECT status FROM payments WHERE ref_id=?', after.order_id!)).toEqual({
+      status: 'SIMULATED',
+    });
     expect(s.campaign('naruto').confirmed).toBe(1);
     expect(s.purchases('collector', 'naruto')).toBe(1);
   });
@@ -182,8 +181,10 @@ describe('confirm & pay', () => {
     const after = s.item('collector', item.id);
     expect(after.state).toBe('confirmed');
     expect(
-      s.one<{ character_id: string }>('SELECT character_id FROM allocations WHERE id=?', after.allocation_id!)!
-        .character_id,
+      s.one<{ character_id: string }>(
+        'SELECT character_id FROM allocations WHERE id=?',
+        after.allocation_id!,
+      )!.character_id,
     ).toBe('eclipse');
     expect(s.campaign('astral').confirmed).toBe(94);
   });
@@ -202,7 +203,9 @@ describe('confirm & pay', () => {
     });
     expect(r.confirmed).toEqual([n1.id]);
     expect(r.orderIds).toHaveLength(2);
-    expect(lines).toEqual([{ name: 'Astral Kin figure (made to order)', unitAmountCents: 1890, quantity: 2 }]);
+    expect(lines).toEqual([
+      { name: 'Astral Kin figure (made to order)', unitAmountCents: 1890, quantity: 2 },
+    ]);
     const paid = s.processPaymentEvent({
       id: 'evt_basket',
       type: 'checkout.session.completed',
@@ -244,7 +247,11 @@ describe('confirm & pay', () => {
     s.processPaymentEvent({
       id: 'evt_exp',
       type: 'checkout.session.expired',
-      session: { id: 'cs', client_reference_id: r.orderIds[0], metadata: { kind: 'B2C', order_id: r.orderIds[0] } },
+      session: {
+        id: 'cs',
+        client_reference_id: r.orderIds[0],
+        metadata: { kind: 'B2C', order_id: r.orderIds[0] },
+      },
     });
     clock.t += 31 * 60000;
     s.sweepExpired();

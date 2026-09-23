@@ -1,6 +1,11 @@
 'use client';
 import { KinArt } from './art';
-import { characterAlt, getCharacterImage, placeholderImage, type ImageVariant } from '../lib/images';
+import {
+  characterAlt,
+  getCharacterImage,
+  placeholderImage,
+  type ImageVariant,
+} from '../lib/images';
 import type { ThemeInfo } from '../lib/types';
 
 export type ImageCharacter = {
@@ -61,7 +66,13 @@ export function CharacterImage({
 }
 
 /** Visible badge on every surface that shows a licensed concept theme. */
-export function ConceptBadge({ theme, compact = false }: { theme?: ThemeInfo | null; compact?: boolean }) {
+export function ConceptBadge({
+  theme,
+  compact = false,
+}: {
+  theme?: ThemeInfo | null;
+  compact?: boolean;
+}) {
   if (!theme?.licensed) return null;
   return (
     <span className={'concept-badge' + (compact ? ' compact' : '')}>
@@ -98,7 +109,9 @@ export function CharacterTile({
       src={img.src}
       width={img.width}
       height={img.height}
-      alt={rarity ? `${name}, ${rarity.toLowerCase()} figure from ${origin}` : `${name} from ${origin}`}
+      alt={
+        rarity ? `${name}, ${rarity.toLowerCase()} figure from ${origin}` : `${name} from ${origin}`
+      }
       loading="lazy"
       decoding="async"
     />
