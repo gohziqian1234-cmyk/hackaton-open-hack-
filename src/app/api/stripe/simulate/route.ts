@@ -3,11 +3,13 @@ import { assertSameOrigin, currentUser, failure, json } from '../../../../server
 import { DomainError } from '../../../../server/service';
 import { simulateAllowed } from '../../../../server/stripe';
 import { simulateSchema } from '../../../../server/validation';
+import { clientIp, takeToken } from '../../../../server/rate-limit';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 /** DEMO_MODE only: runs the real webhook handler with a synthetic "sim_" event. */
 export async function POST(request: Request) {
   try {
+    takeToken('sim:' + clientIp(request), 20, 60000);
     const service = openService();
     if (!simulateAllowed(service.demo)) throw new DomainError('NOT_FOUND', 404);
     assertSameOrigin(request);

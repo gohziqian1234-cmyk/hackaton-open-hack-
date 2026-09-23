@@ -2,6 +2,7 @@ import { openService } from '../../../server/app';
 import { cookies } from 'next/headers';
 import { DomainError } from '../../../server/service';
 import { actionSchema } from '../../../server/validation';
+import { clientIp, clientKey, takeToken } from '../../../server/rate-limit';
 import {
   SESSION_COOKIE,
   assertSameOrigin,
@@ -13,8 +14,10 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   try {
+    const token = (await cookies()).get(SESSION_COOKIE)?.value;
+    takeToken('get:' + clientKey(request, token), 120, 60000);
     const service = openService();
-    const user = service.identity((await cookies()).get(SESSION_COOKIE)?.value);
+    const user = service.identity(token);
     const params = new URL(request.url).searchParams;
     const campaign = params.get('campaign') ?? 'astral';
     if (!/^[a-z0-9-]{1,64}$/.test(campaign)) throw new DomainError('INVALID_INPUT', 400);
@@ -30,6 +33,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
+    const jarToken = (await cookies()).get(SESSION_COOKIE)?.value;
+    takeToken('post:' + clientKey(request, jarToken), 20, 60000);
     const text = await request.text();
     if (text.length > 8192) throw new DomainError('REQUEST_TOO_LARGE', 413);
     const parsed = actionSchema.safeParse(JSON.parse(text));
@@ -47,6 +52,8 @@ export async function POST(request: Request) {
       startSession(service.login(data.user));
       return response({ ok: true });
     }
+    if (data.action === 'signup' || data.action === 'signin')
+      takeToken('auth:' + clientIp(request), 10, 10 * 60000);
     if (data.action === 'signup') {
       const { token } = service.signup(data.name, data.email, data.password);
       startSession(token);

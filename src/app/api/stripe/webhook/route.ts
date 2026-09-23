@@ -3,12 +3,14 @@ import type Stripe from 'stripe';
 import { failure, json } from '../../../../server/http';
 import { DomainError } from '../../../../server/service';
 import { verifyWebhook } from '../../../../server/stripe';
+import { clientIp, takeToken } from '../../../../server/rate-limit';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const HANDLED = ['checkout.session.completed', 'checkout.session.expired'];
 /** Stripe calls this. The signature is checked against the raw body before anything else. */
 export async function POST(request: Request) {
   try {
+    takeToken('webhook:' + clientIp(request), 300, 60000);
     const raw = await request.text();
     if (raw.length > 65536) throw new DomainError('REQUEST_TOO_LARGE', 413);
     const event = verifyWebhook(raw, request.headers.get('stripe-signature'));

@@ -33,7 +33,9 @@ function stripe() {
 }
 
 function appUrl() {
-  const url = process.env.NEXT_PUBLIC_APP_URL || 'http://127.0.0.1:3000';
+  // RENDER_EXTERNAL_URL is set automatically on Render.
+  const url =
+    process.env.NEXT_PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || 'http://127.0.0.1:3000';
   return url.replace(/\/+$/, '');
 }
 

@@ -28,6 +28,9 @@ export default defineConfig({
       STRIPE_SECRET_KEY: '',
       STRIPE_WEBHOOK_SECRET: '',
       SIMULATE_PAYMENTS: 'true',
+      // The concurrency tests fire dozens of requests from one session in a second.
+      // Rate limiting has its own unit tests.
+      RATE_LIMIT_SCALE: '50',
     },
   },
 });

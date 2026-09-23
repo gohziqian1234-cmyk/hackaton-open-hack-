@@ -84,6 +84,27 @@ Checkout uses Stripe Checkout in **test mode only**; live keys (`sk_live_…`) a
 
 ## Deploy (single host)
 
+### One click on Render (recommended for the hackathon)
+
+[Deploy to Render](https://render.com/deploy?repo=https://github.com/gohziqian1234-cmyk/hackaton-open-hack-/tree/claude/great-ramanujan-ou59s1)
+
+1. Open the link above and sign in to Render with GitHub. Render reads `render.yaml`.
+2. Leave `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` empty to use the simulated payment, or paste Stripe **test** keys.
+3. Click **Apply**. The first build takes about 3–5 minutes. Your site is at `https://loopbox-XXXX.onrender.com` (shown on the service page).
+4. Every push to the branch redeploys automatically.
+
+If the button can't find the Blueprint, use **Render dashboard → New → Blueprint**, pick this repository and the `claude/great-ramanujan-ou59s1` branch.
+
+Free-plan limits: the service sleeps after 15 minutes without visitors (the first request then takes about a minute), and the free instance has no persistent disk, so the demo database re-seeds to 93 / 100 whenever it restarts. That is fine for a demo. For data that must survive restarts, switch the plan to Starter and enable the disk block in `render.yaml`.
+
+Before the site is public for long: set `ADMIN_DEMO=false` (anyone with the link can otherwise switch to Admin) and create a real admin with `ADMIN_EMAIL=… ADMIN_PASSWORD=… npm run create-admin` from the Render shell.
+
+### Any other host (Docker)
+
+`Dockerfile` builds a Node 24 image that runs `npm start` on port 3000. Mount a persistent volume at `/app/data`. Set the same environment variables as in `render.yaml`.
+
+### Requirements for any host
+
 LoopBox stores everything in one SQLite file, so it must run on **one Node 24 server with a persistent disk**. Do not deploy it to Vercel or any serverless platform: every write would be lost.
 
 - **Runtime:** Node 24 or newer.
