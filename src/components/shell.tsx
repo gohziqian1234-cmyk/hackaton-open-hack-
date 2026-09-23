@@ -43,7 +43,10 @@ function Frame({ children }: { children: React.ReactNode }) {
     [menu, setMenu] = useState(false);
   const role = data?.user?.role,
     business = role === 'BUSINESS',
-    admin = role === 'ADMIN';
+    admin = role === 'ADMIN',
+    // Real accounts (and everyone when demo mode is off) get a plain account chip.
+    realUser = !!data?.user && !data.identities.some((i) => i.id === data.user?.id),
+    plain = !!data && (!data.demo || realUser);
   return (
     <>
       <a className="skip-link" href="#content">
@@ -68,20 +71,29 @@ function Frame({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
           <div className="site-header-end">
-            <button
-              className={admin ? 'who admin' : business ? 'who business' : 'who'}
-              onClick={async () => {
-                const toStudio = !business && !admin;
-                await login(toStudio ? 'business' : 'collector');
-                router.push(toStudio ? '/studio' : '/drop');
-              }}
-            >
-              <b aria-hidden="true">{admin ? 'AD' : business ? 'AS' : 'A'}</b>
-              <span className="who-label">
-                {admin ? 'Demo admin' : business ? 'Demo studio' : 'Demo collector'}
-              </span>
-              <span className="visually-hidden">, switch workspace</span>
-            </button>
+            {plain ? (
+              <Link className="who" href={data?.user ? '/me' : '/login'}>
+                <b aria-hidden="true">
+                  {data?.user ? data.user.name.slice(0, 1).toUpperCase() : '?'}
+                </b>
+                <span className="who-label">{data?.user ? data.user.name : 'Sign in'}</span>
+              </Link>
+            ) : (
+              <button
+                className={admin ? 'who admin' : business ? 'who business' : 'who'}
+                onClick={async () => {
+                  const toStudio = !business && !admin;
+                  await login(toStudio ? 'business' : 'collector');
+                  router.push(toStudio ? '/studio' : '/drop');
+                }}
+              >
+                <b aria-hidden="true">{admin ? 'AD' : business ? 'AS' : 'A'}</b>
+                <span className="who-label">
+                  {admin ? 'Demo admin' : business ? 'Demo studio' : 'Demo collector'}
+                </span>
+                <span className="visually-hidden">, switch workspace</span>
+              </button>
+            )}
             <button
               className="menu-button"
               aria-label={menu ? 'Close menu' : 'Open menu'}
@@ -100,7 +112,9 @@ function Frame({ children }: { children: React.ReactNode }) {
             <LogoMark />
             loopbox
           </Link>
-          <p>Limited collectibles, made to confirmed demand. Hackathon demo with no real payments.</p>
+          <p>
+            Limited collectibles, made to confirmed demand. Hackathon demo with no real payments.
+          </p>
           <nav aria-label="Footer">
             <Link href="/terms">Terms (draft)</Link>
           </nav>

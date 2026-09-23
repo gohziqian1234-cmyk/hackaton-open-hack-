@@ -74,7 +74,8 @@ export function Discovery() {
                   </span>
                   {c.partner && (
                     <span className="partner-tag">
-                      {c.partner_type === 'COLLECTIVE' ? 'Creator collective' : 'Brand'}: {c.partner}
+                      {c.partner_type === 'COLLECTIVE' ? 'Creator collective' : 'Brand'}:{' '}
+                      {c.partner}
                     </span>
                   )}
                 </div>
@@ -117,7 +118,10 @@ export function Drop() {
     remaining = Math.max(0, c.capacity - c.confirmed),
     closed = c.phase !== 'ACTIVE_PREORDER' || data.serverTime >= c.ends_at,
     limit = data.purchases >= c.max_per_user,
-    days = Math.max(0, Math.ceil((c.ends_at - data.serverTime) / 86400000));
+    days = Math.max(0, Math.ceil((c.ends_at - data.serverTime) / 86400000)),
+    upcoming =
+      c.phase === 'UPCOMING' || (c.phase === 'ACTIVE_PREORDER' && data.serverTime < c.starts_at),
+    opens = new Date(c.starts_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
   const enter = async () => {
     if (!data.user || data.user.role !== 'COLLECTOR') {
       if (!data.demo) {
@@ -139,7 +143,9 @@ export function Drop() {
           <span className="tm">™</span>
         </h1>
         <p className="lead">{c.description}</p>
-        <h2 className="h3 lineup-title">The lineup. One box holds one kin, and you can’t pick which.</h2>
+        <h2 className="h3 lineup-title">
+          The lineup. One box holds one kin, and you can’t pick which.
+        </h2>
         <ul className="lineup">
           {lineup.map((ch) => {
             const secret = ch.rarity === 'SECRET';
@@ -158,20 +164,26 @@ export function Drop() {
         <p className="note drop-disclosure">
           Every box was shuffled before the drop opened and the fingerprint was published.{' '}
           <Link href={'/verify/' + c.id}>Check the draw yourself</Link>.
-          {data.demo && c.id === 'astral' &&
+          {data.demo &&
+            c.id === 'astral' &&
             ' Demo note: the demo uses a fixed shuffle, so the next box is always Eclipse Knight and the walkthrough is repeatable.'}{' '}
           No real money is taken.
         </p>
       </div>
       <aside className="panel buy" aria-label="Buy a box">
-        <Tier rarity="RARE">{closed ? 'Preorder closed' : 'Preorder open'}</Tier>
+        <Tier rarity="RARE">
+          {upcoming ? 'Opens ' + opens : closed ? 'Preorder closed' : 'Preorder open'}
+        </Tier>
         <div className="price">{sgd(c.price)}</div>
         <p>One sealed blind box, made after the preorder closes.</p>
         <dl className="facts">
           <Stat label="Left" value={`${remaining} of ${c.capacity}`} />
           <Stat label="Per person" value={`${c.max_per_user} max`} />
           <Stat label="Slot hold" value="15 min" />
-          <Stat label="Closes" value={closed ? 'Closed' : days === 1 ? '1 day' : `${days} days`} />
+          <Stat
+            label={upcoming ? 'Opens' : 'Closes'}
+            value={upcoming ? opens : closed ? 'Closed' : days === 1 ? '1 day' : `${days} days`}
+          />
         </dl>
         <Perforation />
         {remaining <= 0 ? (
@@ -189,11 +201,13 @@ export function Drop() {
           <Button wide disabled={busy || closed || limit} onClick={enter}>
             {limit
               ? 'Your collection is complete'
-              : closed
-                ? 'Preorders closed'
-                : data.access.length
-                  ? 'Claim preorder slot'
-                  : 'Play to unlock'}
+              : upcoming
+                ? 'Opens ' + opens
+                : closed
+                  ? 'Preorders closed'
+                  : data.access.length
+                    ? 'Claim preorder slot'
+                    : 'Play to unlock'}
           </Button>
         )}
         <p className="odds-note">

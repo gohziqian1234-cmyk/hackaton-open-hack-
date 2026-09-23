@@ -304,3 +304,63 @@ test('committed pool: 50 concurrent purchases across two processes for the last 
   expect(new Set(units.map((u) => u.pool_unit_id)).size).toBe(96);
   db.close();
 });
+
+test('partner portal: apply, approve, draft, submit, publish, appear on home', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const email = `owner-${Date.now()}@pasarpals.example`;
+  // A brand-new account applies as a creator collective.
+  await page.goto('/login?next=/partners');
+  await page.getByRole('button', { name: 'I’m new here' }).click();
+  await page.getByLabel('Display name').fill('Pasar Pals');
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password').fill('a long passphrase');
+  await page.getByRole('button', { name: 'Create my account' }).click();
+  await expect(page.getByRole('heading', { name: 'Apply to launch a drop' })).toBeVisible();
+  await page.getByRole('button', { name: 'Creator collective' }).click();
+  await page.getByLabel('Organisation name').fill('Pasar Pals');
+  await page.getByLabel('Contact email').fill('hi@pasarpals.example');
+  await page.getByLabel('Number of members').fill('6');
+  await page.getByLabel('Portfolio (link)').fill('https://pasarpals.example');
+  await page.getByLabel('The series you want to launch').fill('Six wet-market stall mascots.');
+  await page
+    .getByLabel('How you own the characters')
+    .fill('Every character was drawn by one of our six members.');
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Submit application' }).click();
+  await expect(page.getByRole('heading', { name: 'Application received' })).toBeVisible();
+  // The admin approves it.
+  await page.goto('/me');
+  await page.getByRole('button', { name: 'Admin', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Admin console' })).toBeVisible();
+  await page.getByRole('button', { name: 'Approve Pasar Pals' }).click();
+  await expect(page.getByRole('button', { name: 'Approve Pasar Pals' })).toHaveCount(0);
+  // The new partner signs back in, drafts a series and submits it.
+  await page.goto('/login?next=/partner');
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password').fill('a long passphrase');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('heading', { name: 'Pasar Pals' })).toBeVisible();
+  await page.getByRole('button', { name: 'New campaign' }).click();
+  await page.getByLabel('Series name').fill('Pasar Pals');
+  await page
+    .getByLabel('Description', { exact: true })
+    .fill('Six wet-market stall mascots, made to order.');
+  for (const [i, name] of ['Fishball Fin', 'Chilli Chan', 'Golden Durian'].entries())
+    await page.locator(`input[name="kinName${i}"]`).fill(name);
+  await expect(page.getByText('30 of 30 boxes assigned')).toBeVisible();
+  await page.getByRole('button', { name: 'Submit for review' }).click();
+  await expect(page.getByText('In review')).toBeVisible();
+  // The admin publishes it; it becomes a second drop card on the home page.
+  await page.goto('/me');
+  await page.getByRole('button', { name: 'Admin', exact: true }).click();
+  await page.getByRole('button', { name: 'Publish Pasar Pals' }).click();
+  await expect(page.getByRole('button', { name: 'Publish Pasar Pals' })).toHaveCount(0);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'More drops' })).toBeVisible();
+  await page.getByRole('link', { name: 'See the Pasar Pals drop' }).click();
+  await expect(page.getByRole('heading', { name: 'Pasar Pals™' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Fishball Fin' })).toBeVisible();
+  await page.screenshot({ path: resolve(screenshotDir, '09-partner-drop.png'), fullPage: true });
+  expect(errors).toEqual([]);
+});

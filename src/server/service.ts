@@ -143,7 +143,7 @@ export class Loopbox {
   }
   demoIdentities() {
     if (!this.demo) return [];
-    const ids = ['collector', 'business', 'demo-0'];
+    const ids = ['collector', 'business', 'demo-0', 'kopi'];
     if (process.env.ADMIN_DEMO !== 'false') ids.push('admin');
     return this.all<{ id: string; name: string; role: string }>(
       `SELECT id,name,role FROM users WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY rowid`,

@@ -21,6 +21,7 @@ export function Studio() {
     if (role !== 'BUSINESS') return;
     fetch('/api/loopbox?analytics=1', { cache: 'no-store' })
       .then(async (r) => {
+        if (r.status === 403) throw new Error('NOT_ASTRAL');
         if (!r.ok) throw new Error('Studio data is unavailable. Please retry.');
         return r.json();
       })
@@ -46,6 +47,18 @@ export function Studio() {
           }
         >
           See confirmed demand and decide what to make. The demo signs you in as Astral Studio.
+        </Empty>
+      </section>
+    );
+  if (fetchError === 'NOT_ASTRAL')
+    return (
+      <section className="wrap page-pad">
+        <Empty
+          heading="h1"
+          title="This studio belongs to Astral Studio"
+          action={<Button href="/partner">Open your partner dashboard</Button>}
+        >
+          Your own campaigns, stats and manifests are on the partner dashboard.
         </Empty>
       </section>
     );

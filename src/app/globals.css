@@ -2066,6 +2066,183 @@ select option {
 }
 
 /* ==========================================================================
+   Accounts and partner portal
+   ========================================================================== */
+.auth-page {
+  display: grid;
+  gap: var(--s4);
+  max-width: 560px;
+}
+.auth-page .lead {
+  margin: 0;
+}
+.auth-card {
+  display: grid;
+  gap: var(--s5);
+}
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  justify-self: start;
+}
+.segmented button {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: var(--r-pill);
+  font-weight: 700;
+  color: var(--moon-muted);
+}
+.segmented button[aria-pressed='true'] {
+  background: var(--orbit-2);
+  color: var(--moon);
+  box-shadow: inset 0 0 0 2px var(--star);
+}
+.partners {
+  display: grid;
+  gap: var(--s5);
+  padding-bottom: var(--s8);
+}
+.partners-hero {
+  display: grid;
+  gap: var(--s4);
+  padding-top: var(--s7);
+}
+.partners-hero .lead {
+  margin: 0;
+}
+.partner-types {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--s4);
+}
+.partner-types .card,
+.terms-card {
+  display: grid;
+  gap: var(--s2);
+}
+.partner-steps {
+  grid-template-columns: repeat(4, 1fr);
+  padding-top: 0;
+}
+.apply {
+  display: grid;
+  gap: var(--s4);
+}
+.apply .empty-state.centered {
+  margin: 0;
+  max-width: none;
+}
+.campaign-list,
+.application-list,
+.editor-kin-list {
+  display: grid;
+  gap: var(--s4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.campaign-row {
+  display: grid;
+  gap: var(--s4);
+}
+.campaign-row .stats {
+  margin: 0;
+}
+.application {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s4) 0;
+  border-bottom: 1px solid var(--line);
+}
+.application:last-child {
+  border-bottom: 0;
+}
+.application a {
+  color: var(--moon);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  margin-right: var(--s3);
+  word-break: break-all;
+}
+.decision {
+  display: grid;
+  gap: var(--s3);
+}
+.decision input {
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  border: 2px solid var(--line);
+  background: var(--ink);
+  color: var(--moon);
+  width: min(420px, 100%);
+}
+.editor .stack {
+  display: grid;
+  gap: var(--s4);
+}
+.kin-row {
+  display: grid !important;
+  grid-template-columns: 96px 1fr auto;
+  gap: var(--s4);
+  align-items: start;
+}
+.kin-row > .kin-art {
+  width: 96px;
+  background: var(--ink);
+  border-radius: var(--r-sm);
+}
+.kin-fields {
+  display: grid;
+  gap: var(--s3);
+}
+.form input[type='color'] {
+  padding: 4px;
+  min-height: 48px;
+  cursor: pointer;
+}
+.units-ok {
+  color: var(--aurora);
+  font-weight: 700;
+}
+.units-bad {
+  color: var(--danger);
+  font-weight: 700;
+}
+.editor-kin-list {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+.editor-kin-list li {
+  display: grid;
+  gap: var(--s2);
+  justify-items: start;
+}
+.editor-kin-list .kin-art {
+  background: var(--ink);
+  border-radius: var(--r-sm);
+}
+@media (max-width: 900px) {
+  .partner-steps {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .partner-steps {
+    grid-template-columns: 1fr;
+  }
+  .kin-row {
+    grid-template-columns: 1fr;
+  }
+  .kin-row > .kin-art {
+    width: 80px;
+  }
+}
+
+/* ==========================================================================
    Studio, partner and admin consoles: same tokens, denser, no foil, no motion
    ========================================================================== */
 .studio h1,

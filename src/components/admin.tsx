@@ -7,8 +7,34 @@ import { phaseLabel, phases, sgd } from '../lib/catalog';
 import type { AdminCampaign, AuditRow } from '../lib/types';
 import { Button, ErrorNote, Stat } from './ui';
 
-type Console = { campaigns: AdminCampaign[]; audit: AuditRow[] };
-const ENTITIES = ['', 'order', 'allocation', 'campaign', 'match', 'application', 'listing', 'market_order', 'report', 'system'];
+type ApplicationRow = {
+  id: string;
+  type: 'BRAND' | 'COLLECTIVE';
+  org_name: string;
+  contact_email: string;
+  website: string | null;
+  proof_url: string | null;
+  portfolio_url: string | null;
+  members_count: number | null;
+  proposed_series: string;
+  ip_statement: string;
+  status: string;
+  admin_note: string | null;
+  created_at: number;
+};
+type Console = { campaigns: AdminCampaign[]; audit: AuditRow[]; applications: ApplicationRow[] };
+const ENTITIES = [
+  '',
+  'order',
+  'allocation',
+  'campaign',
+  'match',
+  'application',
+  'listing',
+  'market_order',
+  'report',
+  'system',
+];
 
 export function AdminConsole({ extra }: { extra?: React.ReactNode }) {
   const { act, busy } = useLoop(),
@@ -17,7 +43,8 @@ export function AdminConsole({ extra }: { extra?: React.ReactNode }) {
     [entity, setEntity] = useState(''),
     [version, setVersion] = useState(0),
     [confirming, setConfirming] = useState(''),
-    [swept, setSwept] = useState('');
+    [swept, setSwept] = useState(''),
+    [notes, setNotes] = useState<Record<string, string>>({});
   useEffect(() => {
     fetch('/api/admin' + (entity ? '?entity=' + entity : ''), { cache: 'no-store' })
       .then(async (r) => {
@@ -52,7 +79,9 @@ export function AdminConsole({ extra }: { extra?: React.ReactNode }) {
       <div className="page-heading">
         <div>
           <h1>Admin console</h1>
-          <p className="lead">Publish and close drops, clean up stale orders, read the audit trail.</p>
+          <p className="lead">
+            Publish and close drops, clean up stale orders, read the audit trail.
+          </p>
         </div>
         <button className="icon-btn" aria-label="Refresh admin data" onClick={reload}>
           <RefreshCw size={18} />
@@ -61,10 +90,7 @@ export function AdminConsole({ extra }: { extra?: React.ReactNode }) {
       <dl className="stats">
         <Stat label="Campaigns" value={data.campaigns.length} />
         <Stat label="Live now" value={live} />
-        <Stat
-          label="Unpaid orders"
-          value={data.campaigns.reduce((n, c) => n + c.pending, 0)}
-        />
+        <Stat label="Unpaid orders" value={data.campaigns.reduce((n, c) => n + c.pending, 0)} />
         <Stat label="Audit rows shown" value={data.audit.length} />
       </dl>
       <section className="card console-section" aria-labelledby="campaigns-heading">
@@ -105,11 +131,10 @@ export function AdminConsole({ extra }: { extra?: React.ReactNode }) {
                       <div className="row table-actions">
                         {c.phase === 'IN_REVIEW' && (
                           <Button
-                            variant="ghost"
                             disabled={busy}
                             onClick={() => run({ action: 'publishCampaign', campaignId: c.id })}
                           >
-                            Publish
+                            Publish {c.name}
                           </Button>
                         )}
                         {c.phase === 'ACTIVE_PREORDER' &&
@@ -181,6 +206,101 @@ export function AdminConsole({ extra }: { extra?: React.ReactNode }) {
         >
           Run sweep
         </Button>
+      </section>
+      <section className="card console-section" aria-labelledby="applications-heading">
+        <h2 id="applications-heading" className="h3">
+          Partner applications
+        </h2>
+        {data.applications.length === 0 ? (
+          <p>No applications yet.</p>
+        ) : (
+          <ul className="application-list">
+            {data.applications.map((a) => (
+              <li key={a.id} className="application">
+                <div className="section-head">
+                  <div>
+                    <strong>{a.org_name}</strong>
+                    <span className="cell-sub">
+                      {a.type === 'BRAND'
+                        ? 'Brand collaborator'
+                        : `Creator collective, ${a.members_count} members`}{' '}
+                      · {a.contact_email}
+                    </span>
+                  </div>
+                  <span className="phase-chip">{a.status.replace('_', ' ').toLowerCase()}</span>
+                </div>
+                <p>{a.proposed_series}</p>
+                <p className="note">Rights: {a.ip_statement}</p>
+                <p className="note">
+                  {[a.website, a.proof_url, a.portfolio_url].filter(Boolean).map((url) => (
+                    <a key={url} href={url!} rel="noopener noreferrer nofollow" target="_blank">
+                      {url}
+                    </a>
+                  ))}
+                </p>
+                {a.status === 'SUBMITTED' && (
+                  <div className="decision">
+                    <label className="inline-field">
+                      <span>Note</span>
+                      <input
+                        value={notes[a.id] ?? ''}
+                        maxLength={500}
+                        onChange={(e) => setNotes({ ...notes, [a.id]: e.target.value })}
+                        aria-label={'Note for ' + a.org_name}
+                      />
+                    </label>
+                    <div className="row table-actions">
+                      <Button
+                        disabled={busy}
+                        onClick={() =>
+                          run({
+                            action: 'decideApplication',
+                            applicationId: a.id,
+                            decision: 'APPROVE',
+                            note: notes[a.id],
+                          })
+                        }
+                      >
+                        Approve {a.org_name}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={busy || !notes[a.id]}
+                        onClick={() =>
+                          run({
+                            action: 'decideApplication',
+                            applicationId: a.id,
+                            decision: 'REQUEST_INFO',
+                            note: notes[a.id],
+                          })
+                        }
+                      >
+                        Request info
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() =>
+                          run({
+                            action: 'decideApplication',
+                            applicationId: a.id,
+                            decision: 'REJECT',
+                            note: notes[a.id],
+                          })
+                        }
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {a.admin_note && a.status !== 'SUBMITTED' && (
+                  <p className="note">Note: {a.admin_note}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
       {extra}
       <section className="card console-section" aria-labelledby="audit-heading">
