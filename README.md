@@ -111,7 +111,7 @@ Safety rails: an opened, unpaid figure is held for 30 minutes (then it returns t
 
 ## Deploy (single host)
 
-[**Deploy to Render**](https://render.com/deploy?repo=https://github.com/gohziqian1234-cmyk/hackaton-open-hack-/tree/claude/eloquent-feynman-4kj3zr) — Render reads `render.yaml` (Node 24, Singapore, health check `/api/health`, HTTPS-only headers, secure cookies). Leave the Stripe fields empty for simulated payments, click **Apply**, and the site appears at `https://loopbox-XXXX.onrender.com` after a 3–5 minute build. Every push to the branch redeploys. If the button can't find the Blueprint: Render dashboard → New → Blueprint → this repository → branch `claude/eloquent-feynman-4kj3zr`.
+[**Deploy to Render**](https://render.com/deploy?repo=https://github.com/gohziqian1234-cmyk/hackaton-open-hack-/tree/main) — Render reads `render.yaml` (Node 24, Singapore, health check `/api/health`, HTTPS-only headers, secure cookies). Leave the Stripe fields empty for simulated payments, click **Apply**, and the site appears at `https://loopbox-XXXX.onrender.com` after a 3–5 minute build. Every push to the branch redeploys. If the button can't find the Blueprint: Render dashboard → New → Blueprint → this repository → branch `main`.
 
 The free plan sleeps after 15 idle minutes and has no persistent disk, so the demo re-seeds to 93 / 100 on restart. For data that must survive, use a paid plan and enable the disk block in `render.yaml`. Before leaving the site public: set `ADMIN_DEMO=false` (and ideally `DEMO_MODE=false`), then create a real admin from the Render shell with `ADMIN_EMAIL=… ADMIN_PASSWORD=… npm run create-admin`.
 
