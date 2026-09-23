@@ -120,7 +120,7 @@ export function AdminConsole({ extra }: { extra?: React.ReactNode }) {
         <h2 id="campaigns-heading" className="h3">
           Campaigns
         </h2>
-        <div className="table-scroll">
+        <div className="table-scroll" tabIndex={0} role="region" aria-label="Campaigns table">
           <table className="data-table">
             <thead>
               <tr>
@@ -395,7 +395,7 @@ export function AdminConsole({ extra }: { extra?: React.ReactNode }) {
           </label>
         </div>
         <p className="note">Append-only. Records hold ids only, never names, emails or phones.</p>
-        <div className="table-scroll">
+        <div className="table-scroll" tabIndex={0} role="region" aria-label="Audit trail table">
           <table className="data-table">
             <thead>
               <tr>

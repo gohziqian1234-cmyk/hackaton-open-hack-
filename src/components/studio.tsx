@@ -110,9 +110,7 @@ export function Studio() {
           <h2 className="h3">{c.name}</h2>
         </div>
         <span className="phase-chip">{phaseLabel(c.phase)}</span>
-        {next && (
-          <Button onClick={() => advance.current?.showModal()}>Advance campaign</Button>
-        )}
+        {next && <Button onClick={() => advance.current?.showModal()}>Advance campaign</Button>}
       </div>
       <dl className="stats">
         <Stat label="Plays" value={analytics.plays} />
@@ -146,7 +144,7 @@ export function Studio() {
               </a>
             </div>
           </div>
-          <div className="table-scroll">
+          <div className="table-scroll" tabIndex={0} role="region" aria-label="Campaign table">
             <table className="data-table">
               <thead>
                 <tr>

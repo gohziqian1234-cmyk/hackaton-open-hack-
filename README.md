@@ -1,150 +1,202 @@
 # LoopBox
 
-**A little mystery. A better way to collect.** LoopBox is a demo of demand-aware collectible commerce. Collectors earn blind-box preorder access by completing a branded quest, digitally discover their allocation, and can make a same-rarity exchange before the series is manufactured. The business sees a production plan derived from confirmed orders.
+**A little mystery. A better way to collect.** LoopBox sells limited blind-box collectibles made to confirmed demand. Collectors win a free game to unlock a preorder slot, pay, open a digital box whose contents were fixed by a published shuffle, and can swap duplicates inside the same rarity before anything is manufactured. Brands and creator collectives launch their own drops, and collectors can sell their own series in a marketplace.
 
-This is a **single-host hackathon prototype** with fictional original IP. Checkout and demo identities are simulated. It is not a live store.
+This is a **single-host hackathon prototype** (NYP Open Hack) with fictional original characters. Payments run in **Stripe test mode** or are simulated. It is not a live store and takes no real money.
 
 ![LoopBox desktop home screen](./preview/home.png)
 
 ## Problem
 
-The typical collectible cycle forecasts demand, manufactures inventory, then discovers what people actually want. Blind-box trading after shipping adds unnecessary movement. LoopBox moves allocation and trading ahead of manufacturing. It makes no numerical carbon-savings claim.
+Blind-box drops sell out to bots in seconds, and factories guess demand months ahead, so some series are over-produced while fans miss out. After shipping, collectors mail duplicates to each other to trade. LoopBox moves the sale, the allocation and the trading **before** manufacturing. It makes no numerical waste or carbon-saving claim.
 
-## Solution and product lifecycle
+## Solution: one system, three models
 
-`Create limited series → Set cap → Play quest → Earn access → Confirm demo preorder → Receive one digital blind box → Open → Keep or exchange with another collector in the same rarity tier → Lock final ownership → Manufacture confirmed quantities in-house → Ship`
+**B2C limited drop.** A campaign has a hard cap (Astral Kin: 100 boxes, S$18.90 each, at most 2 per collector). Collectors play a short free game (a 30-second fragment run, or an untimed lore challenge) to earn one 15-minute preorder slot, then pay with Stripe Checkout. Each paid order takes the next box from a shuffle that was fingerprinted before sales opened. The reveal shows the character; duplicates can be swapped for another character of the same rarity until allocations lock. The manufacturing manifest counts only paid boxes.
 
-The demo campaign is **Astral Kin — Fragments Beyond the Stars**. It starts with 93 of 100 preorders, costs SGD $18.90 per box, and allows at most two paid boxes per collector. Seven original characters have common, rare, and secret tiers. There is no way to buy a guaranteed character.
+**B2B partner portal.** A brand collaborator or creator collective applies with proof that it owns its characters. An admin approves; the partner drafts a campaign (price, cap, dates, game, 2–8 characters whose box counts must add up to the cap) and submits it. The admin publishes it, which builds and fingerprints its shuffle. The partner dashboard shows plays, wins, paid boxes, sell-through, trades, revenue and the partner's share, and downloads the manifest.
 
-## Core features
-
-- Editorial storefront, responsive campaign page, production cap, rarity lineup, account purchase limit, and waitlist for sold-out state.
-- Configurable 30-second fragment run with keyboard and touch controls, hazard avoidance, pause, score, retry, and a one-use server game session. The untimed, three-question lore challenge grants the same access.
-- Server-issued, 15-minute preorder access. Demo checkout redeems it in a SQLite `BEGIN IMMEDIATE` transaction, applies the hard capacity cap and per-user limit, and creates exactly one order and allocation.
-- Three.js / React Three Fiber character and box geometry, lazy-loaded WebGL stage, animated digital reveal, reduced-motion support, and a static fallback. Revisiting the reveal cannot reroll the allocation.
-- Collection, duplicate detection, downloadable social card, same-rarity trade preferences, deterministic reciprocal match, consent and decline, and final ownership updates.
-- Studio campaign settings, phase advancement, meaningful demand figures, allocation table, CSV plan, and production lock. Final production quantity comes from confirmed allocations.
+**C2C creator marketplace.** A collector who verifies an email and a phone number (simulated codes) can list their own series with photos and the stock they hold of each character. Buyers see the full stock table, pay in-app, and each box is drawn from the remaining stock. The money is held until the buyer confirms receipt; the platform records its fee. Buyers can report a problem; an admin upholds (refund) or dismisses it, and the seller's trust score updates.
 
 ## Architecture
 
-Next.js App Router and React 19 provide the interface. TypeScript and Zod validate API input. The `src/server/service.ts` domain service owns business rules. Node's built-in SQLite library stores data in `data/loopbox.sqlite` by default; schema, indexes, foreign keys, unique constraints, and a database capacity trigger are defined in `src/server/schema.ts`. Session tokens are random and stored in HTTP-only, SameSite cookies. The seeded quick accounts are for the demo only. `DEMO_MODE=false` disables those accounts; production authentication has not been implemented.
+| Layer    | Choice                                                                                                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UI       | Next.js 16 App Router, React 19, plain CSS tokens (no Tailwind)                                                                                                        |
+| API      | `/api/loopbox` action endpoint (Zod discriminated union) + small GET routes + `/api/stripe/*` + `/api/upload`                                                          |
+| Domain   | `src/domain/*` pure functions: fairness shuffle, C2C draw, fee, trust, metrics                                                                                         |
+| Service  | `src/server/*`: every method takes the user id first and checks role and ownership                                                                                     |
+| Database | SQLite through Node's built-in `node:sqlite`, WAL, `BEGIN IMMEDIATE` writes, CHECK constraints and triggers, forward-only migrations (`PRAGMA user_version`, 8 so far) |
+| Payments | Stripe Checkout Sessions (test mode) + signed webhook; simulated webhook in demo mode                                                                                  |
+| Files    | Local disk `data/uploads/`, type decided by magic bytes                                                                                                                |
+| Jobs     | Admin "Run sweep" + lazy expiry on read (no cron)                                                                                                                      |
+| Hosting  | One Node 24 server with a persistent disk; laptop as backup                                                                                                            |
 
-Routes: `/` discovery, `/drop` campaign, `/quest` game, `/checkout` simulated checkout, `/reveal/[id]` digital reveal, `/collection`, `/trades`, and `/studio`. `/api/loopbox` is the validated JSON boundary. UI components never grant entitlements or alter ownership directly. `ARCHITECTURE.md` records the inspection and design decisions.
+```
+ Browser (mobile-first UI, no business rules)
+    │  fetch JSON (same-origin POST, Zod-validated, 8 KB cap)
+    ▼
+ Next.js route handlers ──► src/server/*.ts (roles, ownership, transactions) ──► src/domain/* (pure)
+    │                             │
+    │                             ▼
+    │                      SQLite file (WAL) + CHECKs + append-only triggers
+    │                      data/loopbox.sqlite, data/uploads/
+    ▼
+ checkout action ──► Stripe (test) Checkout page
+                              │
+      /api/stripe/webhook ◄───┘ signed event ─► webhook_events (dedupe) ─► allocate / hold funds in one txn
+      /api/stripe/simulate (demo only) ─► the same handler
+```
 
-### Database model
+### The fairness proof, explained to a 12-year-old
 
-Businesses, users, campaigns, characters, sessions, game sessions, preorder access, orders, allocations, trade preferences, matches, and waitlist entries are related by foreign keys. Orders have unique access IDs; allocations have unique order IDs. The trigger blocks inserts above campaign capacity, even if application logic is bypassed. Indexes cover orders, entitlements, ownership, preference lookup, and matches. Reinitializing from an empty SQLite file seeds 93 historical orders and allocations; they represent demo data, not actual purchases.
+Before anyone buys, the computer shuffles all 100 boxes using a secret random number and writes down the order. It doesn't show you the order; it shows you a **fingerprint** of it (a SHA-256 hash). Changing even one box would change the fingerprint completely. Boxes are then handed out strictly in that order: the first buyer gets box 1, the next box 2, and so on. When preorders close, the secret number is revealed. Your browser re-does the shuffle itself and checks that the fingerprint matches the one published at the start. If it matches, nobody moved a box after sales opened, not even us.
 
-### Matching and digital allocation
+**Demo honesty:** the seeded Astral Kin drop uses a fixed, disclosed seed so box 94 is always Eclipse Knight and the walkthrough is repeatable. The fingerprint still proves the order never changed after it was published. The verify page says the same.
 
-Demo checkout deterministically allocates **Eclipse Knight** so the walkthrough is repeatable. Non-demo allocation uses configurable weights, but there is no production checkout. Each allocation belongs to one immutable order. Reveal only marks it opened. Matching searches an available allocation from another owner, in the same campaign and rarity, whose owner wants the offered character and whose character is wanted by the requester. Both allocations are reserved atomically. Both collectors must accept before the two owner IDs swap. Sarah's seeded demo listing has simulated consent, disclosed in the UI. Pending matches expire at production lock. The plan counts the character IDs of all final allocations; trades change ownership without creating units.
+## Setup
 
-### Game and 3D reveal
-
-`src/lib/catalog.ts` defines the quest duration, waves, score target, visuals, and access reward. The fragment-run trajectory is submitted to a one-use server session. The server calculates its score from the generated lane pattern and validates elapsed time and wave count. This is plausible-run validation for a demo, **not authoritative anti-cheat** against a scripted client. The lore route is motor-accessible and server-graded. The 3D stage loads separately from the initial page bundle. It uses generated low-poly geometry, capped device pixel ratio, restrained lights, and a still-art fallback when WebGL is unavailable.
-
-## Setup and environment
-
-Requires **Node 24 or newer** and npm. No external credentials are needed.
+Requires **Node 24 or newer** and npm. No credentials are needed for the demo.
 
 ```bash
 npm ci
-cp .env.example .env.local # optional; on Windows use Copy-Item
-npm run dev
+cp .env.example .env.local   # optional; on Windows use Copy-Item
+npm run dev                  # http://127.0.0.1:3000
 ```
 
-Open `http://127.0.0.1:3000`. The database is created on first request. `LOOPBOX_DB` overrides its location; the server needs a persistent writable disk. `DEMO_MODE=true` enables seeded collector and studio switching. `.env.example` contains the complete environment template. There are no payment, Supabase, AI, or analytics service keys.
+The database is created and seeded on the first request. `npm run reset:demo` (with the server stopped) deletes the local database so the next start re-seeds 93 / 100.
 
-## Demo accounts and walkthrough
+### Environment variables
 
-Use the top-right switcher for **Alex / Demo collector** and **Astral Studio / Demo studio**. Sarah is a seeded matching partner, accessible only through the demo scenario. Fresh data starts at 93 / 100.
+| Variable                                      | Default                 | What it does                                                                                                                               |
+| --------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `LOOPBOX_DB`                                  | `data/loopbox.sqlite`   | SQLite file. Uploads are stored in `uploads/` next to it.                                                                                  |
+| `DEMO_MODE`                                   | `true`                  | Demo identity switcher, "Demo: win instantly", simulated payments without keys, OTP codes shown on screen. `false` turns all of these off. |
+| `ADMIN_DEMO`                                  | `true`                  | Adds Admin to the demo switcher. Set `false` on any long-lived public deployment.                                                          |
+| `STRIPE_SECRET_KEY`                           | empty                   | Stripe **test** key (`sk_test_…`). Live keys are refused at start-up and at runtime. Server-only.                                          |
+| `STRIPE_WEBHOOK_SECRET`                       | empty                   | `whsec_…` for verifying webhooks. Server-only.                                                                                             |
+| `NEXT_PUBLIC_APP_URL`                         | `http://127.0.0.1:3000` | Base URL for Stripe return links (Render's `RENDER_EXTERNAL_URL` is used when unset).                                                      |
+| `SIMULATE_PAYMENTS`                           | `true`                  | In demo mode, allows the simulated webhook even when Stripe keys are set.                                                                  |
+| `MAX_CHARGE_CENTS`                            | `100000`                | Hard ceiling for any single charge (S$1,000).                                                                                              |
+| `HOSTNAME` / `PORT`                           | `127.0.0.1` / `3000`    | `npm start` binds to localhost unless `HOSTNAME=0.0.0.0`.                                                                                  |
+| `HTTPS_ONLY`                                  | unset                   | `true` adds HSTS and `upgrade-insecure-requests`.                                                                                          |
+| `COOKIE_SECURE`                               | unset                   | `true` always marks the session cookie `Secure` (it already is on HTTPS requests).                                                         |
+| `RATE_LIMIT_SCALE`                            | `1`                     | Multiplies every rate limit. For load tests only.                                                                                          |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | —                       | Used only by `npm run create-admin`.                                                                                                       |
 
-1. Open `/`, enter Astral Kin, and inspect capacity, price, and rarity lineup.
-2. Select **Play to unlock**. Complete the fragment run or the untimed lore challenge.
-3. Claim the earned slot and confirm the **demo** preorder. No money or card data is collected.
-4. Open the allocated box. The new kin is **Eclipse Knight · Rare**, making a duplicate of Alex's seeded Eclipse Knight.
-5. Select **Find a trade**, choose **Aurora Warden · Rare**, and accept Sarah's reciprocal match.
-6. Refresh `/collection` to see persistent Aurora Warden ownership.
-7. Switch to `/studio`; inspect confirmed orders and demand, then advance through **Preorder closed → Trade window → Allocation locked**. The final manufacturing plan totals 94 units in this path.
+`npm start` runs `scripts/check-env.mjs` first and **refuses to start** with a live Stripe key, a malformed webhook secret, a secret-looking value in any `NEXT_PUBLIC_` variable, an invalid spending cap, or an http app URL under `HTTPS_ONLY`. It warns (without printing any secret) when demo mode or the admin switcher is on for a public host.
 
-For a repeatable run, stop the server and run `npm run reset:demo` (it removes only the generated `data/loopbox.sqlite` and related `-wal`/`-shm` files). Restart the app. This deletes local demo progress.
+## Seed and demo accounts
+
+On an empty database the app seeds:
+
+- **Astral Kin** by Astral Studio: 100 boxes (Nova Scout, Moss Oracle, Tide Keeper, Ember Cub 21 each, Common; Eclipse Knight, Aurora Warden 7 each, Rare; The Void Prince 2, Secret), 93 already sold, fingerprint published.
+- **Kopi Kaki Collective**: a draft campaign (5 characters, cap 40). **Hawker Heroes**: a submitted partner application.
+- Marketplace listings: Mei's _Tropical Treats_ (trust 96), Jun's _Night Market Cats_ (88), Priya's _Garden City Sprouts_ (100, a single rare left), and one paid Alex←Mei order with a three-message chat.
+
+Demo identities (open **Me** → _Demo identities_, or use the top-right chip): **Alex** (collector, verified, already owns one Eclipse Knight), **Sarah (demo)** (collector, has Aurora Warden listed for trade, unverified), **Mei**, **Jun**, **Priya** (verified sellers), **Astral Studio** and **Kopi Kaki Collective** (partners), **Admin**. Real accounts can also sign up at `/login` with an email and a password.
+
+The 90-second walkthrough is in [DEMO.md](./DEMO.md).
 
 ## Payments (Stripe test mode)
 
-Checkout uses Stripe Checkout in **test mode only**; live keys (`sk_live_…`) are refused. A box is allocated only after a signed, de-duplicated `checkout.session.completed` webhook. The success page never allocates; it waits for the server.
+A box is allocated only after a signed, de-duplicated `checkout.session.completed` webhook; the success page never allocates. With no keys in demo mode, **Pay with card** runs a simulated payment through the same handler and says so on screen.
 
-- **No keys (default demo):** with `DEMO_MODE=true` and `STRIPE_SECRET_KEY` empty, "Pay with card" runs a simulated payment through the same webhook handler. The page says "Simulated payment (demo)".
-- **Real test payments on your laptop:**
-  1. Put your test key in `.env.local`: `STRIPE_SECRET_KEY=sk_test_...` (server-only, never `NEXT_PUBLIC_`).
-  2. `stripe login`, then `stripe listen --forward-to 127.0.0.1:3000/api/stripe/webhook`.
-  3. Copy the `whsec_...` it prints into `.env.local` as `STRIPE_WEBHOOK_SECRET`, then restart `npm run dev`.
-  4. Pay with card `4242 4242 4242 4242`, any future expiry date, any CVC. The Stripe CLI prints `checkout.session.completed` and `[200]`.
-- **Safety rails:** Stripe needs a Checkout Session to live at least 30 minutes, so an unpaid order holds its seat for 31 minutes, then expires (Stripe's `checkout.session.expired` webhook, or lazily on the next page load). A payment that arrives after its seat was given away is refunded automatically. `MAX_CHARGE_CENTS` (default `100000`, S$1,000) caps any single charge.
-- **If the webhook can't reach you during a demo:** with `SIMULATE_PAYMENTS=true` the waiting page offers "Simulate payment (demo)" after 60 seconds.
+For real test payments on a laptop: put `STRIPE_SECRET_KEY=sk_test_…` in `.env.local`, run `stripe listen --forward-to 127.0.0.1:3000/api/stripe/webhook`, copy the printed `whsec_…` into `STRIPE_WEBHOOK_SECRET`, restart, and pay with `4242 4242 4242 4242`, any future date, any CVC.
+
+Safety rails: an unpaid order holds its box for 31 minutes (Stripe's minimum session life is 30), then expires and the box goes back. A payment that arrives after its box was given away is refunded automatically. `MAX_CHARGE_CENTS` caps any single charge.
 
 ## Deploy (single host)
 
-### One click on Render (recommended for the hackathon)
+[**Deploy to Render**](https://render.com/deploy?repo=https://github.com/gohziqian1234-cmyk/hackaton-open-hack-/tree/claude/great-ramanujan-ou59s1) — Render reads `render.yaml` (Node 24, Singapore, health check `/api/health`, HTTPS-only headers, secure cookies). Leave the Stripe fields empty for simulated payments, click **Apply**, and the site appears at `https://loopbox-XXXX.onrender.com` after a 3–5 minute build. Every push to the branch redeploys. If the button can't find the Blueprint: Render dashboard → New → Blueprint → this repository → branch `claude/great-ramanujan-ou59s1`.
 
-[Deploy to Render](https://render.com/deploy?repo=https://github.com/gohziqian1234-cmyk/hackaton-open-hack-/tree/claude/great-ramanujan-ou59s1)
+The free plan sleeps after 15 idle minutes and has no persistent disk, so the demo re-seeds to 93 / 100 on restart. For data that must survive, use a paid plan and enable the disk block in `render.yaml`. Before leaving the site public: set `ADMIN_DEMO=false` (and ideally `DEMO_MODE=false`), then create a real admin from the Render shell with `ADMIN_EMAIL=… ADMIN_PASSWORD=… npm run create-admin`.
 
-1. Open the link above and sign in to Render with GitHub. Render reads `render.yaml`.
-2. Leave `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` empty to use the simulated payment, or paste Stripe **test** keys.
-3. Click **Apply**. The first build takes about 3–5 minutes. Your site is at `https://loopbox-XXXX.onrender.com` (shown on the service page).
-4. Every push to the branch redeploys automatically.
+Any other host: `Dockerfile` builds a Node 24 image running `npm start` on port 3000; mount a persistent volume at `/app/data`. **Do not use Vercel or any serverless platform**: SQLite writes would be lost.
 
-If the button can't find the Blueprint, use **Render dashboard → New → Blueprint**, pick this repository and the `claude/great-ramanujan-ou59s1` branch.
-
-Free-plan limits: the service sleeps after 15 minutes without visitors (the first request then takes about a minute), and the free instance has no persistent disk, so the demo database re-seeds to 93 / 100 whenever it restarts. That is fine for a demo. For data that must survive restarts, switch the plan to Starter and enable the disk block in `render.yaml`.
-
-Before the site is public for long: set `ADMIN_DEMO=false` (anyone with the link can otherwise switch to Admin) and create a real admin with `ADMIN_EMAIL=… ADMIN_PASSWORD=… npm run create-admin` from the Render shell.
-
-### Any other host (Docker)
-
-`Dockerfile` builds a Node 24 image that runs `npm start` on port 3000. Mount a persistent volume at `/app/data`. Set the same environment variables as in `render.yaml`.
-
-### Requirements for any host
-
-LoopBox stores everything in one SQLite file, so it must run on **one Node 24 server with a persistent disk**. Do not deploy it to Vercel or any serverless platform: every write would be lost.
-
-- **Runtime:** Node 24 or newer.
-- **Disk:** mount a persistent volume at `data/` (or point `LOOPBOX_DB` at a file on the volume).
-- **Environment:** copy the variables from `.env.example` into the host's settings. Set `HOSTNAME=0.0.0.0` so the server accepts outside traffic. The host's `PORT` variable is respected.
-- **Build and start:** `npm ci && npm run build`, then `npm start`.
-- **Health check:** `GET /api/health` returns `{"ok":true,"db":true,"demo":true}` when the database opens.
-
-`npm start` binds to `127.0.0.1` unless `HOSTNAME` is set, so a laptop demo is never exposed to the local network by accident. The laptop (`npm run build && npm start`) is always the backup if the host is down.
-
-## Testing
+## Tests
 
 ```bash
-npm run typecheck
-npm run lint
-npm test
-npm run build
-npm run test:e2e
+npm run typecheck   # TypeScript, no errors
+npm run lint        # ESLint, 0 errors
+npm test            # Vitest: 148 tests in 14 files
+npm run build       # production build
+npm run test:e2e    # Playwright: 10 browser tests (set PW_CHROMIUM_PATH if Chrome isn't installed)
 ```
 
-`tests/domain.test.ts` checks entitlement uniqueness, losing and winning quests, access reuse and expiry, per-user and campaign caps, cross-user access, same-rarity enforcement, reciprocal matching, both consents, trade rejection, production locking, and plan totals. Playwright uses a separate seeded SQLite file and installed Chrome. Its browser tests cover the complete golden path, 30-second keyboard game with pause, last-unit concurrent API requests, role and origin guards, 375px layout, reduced motion, WebGL fallback, and WCAG A/AA axe checks on the primary collector pages. It captures review screenshots in the parent task's `work/qa/` folder. Some locked-down machines may require `npx playwright install chromium` or a local Chrome installation.
+What they prove (counts from the last run at tag `m9-green`):
 
-## Security and sustainability assumptions
+- **Fairness:** pool length, deterministic shuffle, commitment recompute, mismatch detection, browser and server give the same result.
+- **Payments:** age confirmation required; the same Stripe event 3× allocates once; a bad signature is 400; 50 concurrent payments for the last 3 boxes give exactly 3 allocations and 47 refunds; live keys and over-cap charges refused.
+- **Marketplace:** fee table (1 cent, 625, 1000, 100000); the draw never picks an empty character and matches stock shares within ±2 points over 10,000 draws; 50 parallel buys over five database connections for 5 boxes never go below zero; a seller can't buy their own listing (403 and a database CHECK); the draw log can't be edited or deleted; a chat message containing `<script>` renders as text.
+- **Authorization (`tests/authz.test.ts`):** every IDOR case in the spec (someone else's allocation, access, match, partner analytics and manifest, listing, order, chat) and every forbidden cell of the role matrix; plus a `DEMO_MODE=false` smoke test.
+- **Hardening:** request bodies are capped while streaming (a 10 MB chunked body stops after ~8 KB); the start-up config check.
+- **Browser:** the golden path (quest → pay → reveal → trade → close → manifest → verify), keyboard game with pause, 375px layout with reduced motion and no WebGL, API boundaries and role guards, 50 concurrent purchases across two processes, partner portal journey, two marketplace journeys, and every route at 390px with no sideways scroll and no axe (WCAG 2.1 A/AA) violations.
 
-The demo uses one-use game sessions and access rows, HTTP-only random session cookies, server ownership checks, request schema validation, same-origin POST checks, foreign keys, transactions, and a database capacity trigger. It does not include production sign-in, rate limiting across hosts, payment settlement, authoritative anti-cheat, or bot protection. The seeded studio identity is deliberately easy to enter and must be disabled for any public deployment.
+## Security
 
-Confirmed preorder count is the production quantity. “Unmanufactured capacity” is simply cap minus orders, **not a measured amount of waste or carbon saved**. Physical fulfilment is a narrative phase in this prototype; no shipment is placed.
+| Area                | What is in place                                                                                                                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Authentication      | Email + password accounts (scrypt), random 32-byte session tokens stored only as SHA-256 hashes, 24-hour sessions, token rotation on sign-in, lockout after 5 wrong passwords for 15 minutes. Demo sign-in exists only in demo mode. |
+| Cookies             | `loopbox_session`: HttpOnly, SameSite=Strict, Secure on HTTPS (always with `COOKIE_SECURE=true`), path `/`.                                                                                                                          |
+| Authorization       | Every service method checks role and ownership; other people's records answer 404/403. Admin routes and actions require the ADMIN role. Covered by `tests/authz.test.ts`.                                                            |
+| Input               | Zod on every action and query; text is Unicode-normalised with control and bidi characters stripped; links must be http(s); `% _` are escaped in search.                                                                             |
+| SQL injection       | Every query uses `?` parameters. The only string-built SQL joins fixed fragments.                                                                                                                                                    |
+| XSS                 | React text rendering only (no `dangerouslySetInnerHTML`, `innerHTML` or `eval` anywhere); CSP `default-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`; CSV cells are formula-neutralised.                                |
+| CSRF                | Every POST must come from the same origin (403 `INVALID_ORIGIN`) and cookies are SameSite=Strict.                                                                                                                                    |
+| Rate limits         | Per session or IP: 20 actions/min, 10 sign-in attempts per 10 min, 120 reads/min; OTP 5 per 10 min; chat 30 per 10 min; uploads 20/min and 30/hour; admin, manifest, verify, webhook each limited.                                   |
+| Body size           | 8 KB for actions, 1 KB for simulate, 64 KB for webhooks, 2 MB (+ envelope) for uploads, enforced while reading.                                                                                                                      |
+| Uploads             | Only PNG/JPEG/WebP recognised by their first bytes (name and declared type ignored), ≤2 MB, random file names, served with the stored type, `nosniff` and a sandbox CSP; drafts are visible to their uploader only.                  |
+| Payments            | Test keys only, amount always from the database, spending cap, signature-checked and de-duplicated webhooks.                                                                                                                         |
+| Database rules      | CHECK constraints (capacity, stock ≥ 0 and ≤ declared, buyer ≠ seller, fee + seller share = total), unique pool units, append-only triggers on the pool, commitments, C2C draws and audit log.                                       |
+| Headers             | CSP, `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, COOP, CORP, `Permissions-Policy`; HSTS with `HTTPS_ONLY=true`; `X-Powered-By` removed.                                                                    |
+| Production settings | `next start` (production mode), no browser source maps, errors return a code only (`SERVER_ERROR`) with no stack, logs never contain emails, phones or tokens, audit rows hold ids only.                                             |
+| Secrets             | Only in server environment variables; `.env*` is git-ignored; the full git history was scanned and holds no keys, tokens or database files.                                                                                          |
 
-## Working, simulated, future work
+Not in place (see limitations): CAPTCHA, cross-host rate limiting, real SMS/email delivery, authoritative anti-cheat.
 
-**Working:** the local collector journey, server entitlements, capacity guard, persistent SQLite allocations, digital reveal, reciprocal exchange, phase lock, and derived production plan.
+## What is real and what is simulated
 
-**Simulated:** identities, payment, Sarah's acceptance, 93 historical orders, manufacturing, and shipping.
+| Feature                    | Real in this build                                                               | Simulated or missing                                                                         |
+| -------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Accounts                   | Email + password sign-up and sign-in                                             | Demo identity switcher (demo mode only)                                                      |
+| Game gate                  | Server-issued one-use sessions, server-side scoring, daily attempt limit         | "Demo: win instantly" (demo mode only); no authoritative anti-cheat                          |
+| B2C payment                | Stripe Checkout in test mode + signed webhook                                    | Simulated webhook when no keys are set (labelled on screen)                                  |
+| Fair allocation            | Committed shuffle, public fingerprint, in-browser verification                   | The demo campaign's seed is fixed and disclosed                                              |
+| Trades                     | Same-rarity reciprocal matching, both must accept                                | Sarah's acceptance in the scripted demo                                                      |
+| Partner portal             | Applications, approval, drafts, publish, dashboard, manifest                     | Payouts to partners                                                                          |
+| Marketplace                | Listings, uploads, stock-weighted draws, held funds ledger, reports, trust, chat | OTP codes are shown on screen instead of sent; seller payouts; declared stock is not checked |
+| Manufacturing and shipping | Manifest CSV from paid boxes                                                     | No factory or courier integration                                                            |
+| Seed data                  | —                                                                                | 93 historical Astral Kin orders and the marketplace listings are demo data                   |
 
-**Future work:** production identity and payment providers, PostgreSQL for deployment across multiple servers, audited game telemetry and anti-cheat, fulfillment integration, campaign creation and multi-brand support, live recipient consent notifications, measured sustainability research, and performance profiling on physical mobile devices.
+## Business model (every number is an assumption or projection)
 
-## Known limitations
+- **B2C and partner drops:** LoopBox keeps the difference between the box price and the partner's share. The partner's share is **30% of paid orders** by default (`revenue_share_bps = 3000`), an **assumption** to be agreed with each partner.
+- **Marketplace:** platform fee **8% of each order, minimum S$0.50** (`src/domain/fee.ts`), an **assumption** the founders will set.
+- **Wedge (assumption):** creator collectives who can't afford a factory minimum order, because every unit is paid before it is made.
+- No revenue, user or market-size figures are claimed; any the team presents are **projections** to be labelled as such.
 
-- The app edits one seeded campaign; it does not create additional campaigns. The studio is therefore a focused single-series demo.
-- SQLite requires a persistent single-host runtime. Serverless or multi-instance hosting requires a database migration.
-- Direct reciprocal matching is implemented; three-way cycles are not.
-- The 3D guardian is generated geometry with color variants rather than seven separately modelled character assets.
-- The game session checks elapsed time and trajectory plausibility but cannot defeat a client that scripts legal lane movements.
+## LEGAL REVIEW REQUIRED
+
+This prototype has **not** been reviewed by a lawyer. Before any real launch, get advice on:
+
+- **Gambling Control Act 2022 (Singapore):** whether paid chance-based blind boxes and marketplace draws fall within its scope.
+- **Consumer protection (fair trading):** preorders, cancellation, refunds and late delivery.
+- **PDPA:** collection and retention of names, emails, phone numbers and age confirmations.
+- **IP and licensing:** brand collaborator drops and seller-listed series (counterfeits).
+- **Seller-declared stock:** liability when a seller's declared stock is wrong.
+- **Payments and escrow regulation:** holding funds for sellers until receipt.
+
+## Limitations
+
+- SQLite on one host: no horizontal scaling; the free Render plan loses data on restart.
+- Rate limits are in memory on one process.
+- OTP codes are simulated; no SMS or email is sent.
+- No CAPTCHA; the game check is a plausibility check, not authoritative anti-cheat.
+- Seller payouts and partner payouts are ledger entries only (no Stripe Connect).
+- Only two-way swaps; no multi-way trade cycles.
+- With `DEMO_MODE=false` the demo catalogue (Astral Kin and the seeded listings) is still seeded on an empty database; its seeded accounts have no passwords and cannot sign in.
+
+## Future work
+
+PostgreSQL for multiple servers; Stripe Connect payouts for partners and sellers; Singpass / MyInfo and real SMS verification; CAPTCHA and stronger anti-bot measures; multi-way swaps; a native app; factory and courier integrations.

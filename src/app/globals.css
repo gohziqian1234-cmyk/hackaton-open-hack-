@@ -2938,3 +2938,36 @@ code {
 .buy-box .form-row {
   align-items: end;
 }
+.table-scroll:focus-visible {
+  outline: 3px solid var(--star);
+  outline-offset: 4px;
+  border-radius: var(--r-sm);
+}
+/* Admin lists on a phone: long links wrap, the note field shrinks instead of pushing the page. */
+.application,
+.application-list,
+.console-section {
+  min-width: 0;
+}
+.application p,
+.application a {
+  overflow-wrap: anywhere;
+}
+.decision .inline-field {
+  flex-wrap: wrap;
+}
+.decision .inline-field input {
+  flex: 1 1 180px;
+  width: auto;
+  min-width: 0;
+}
+.console-section,
+.application-list,
+.application,
+.decision {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* Outside tables (applications, reports) the action buttons wrap on a phone. */
+.application .table-actions {
+  flex-wrap: wrap;
+}

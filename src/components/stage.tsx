@@ -59,12 +59,14 @@ export function Stage({
         <KinArt id={character} className="fallback-kin" />
       </div>
     ) : (
-      <div className="fallback-art">
-        {opened ? <KinArt id={character} /> : <BoxArt />}
-      </div>
+      <div className="fallback-art">{opened ? <KinArt id={character} /> : <BoxArt />}</div>
     );
   return (
-    <div className={'product-stage ' + mode} aria-label="Interactive 3D Astral Kin collectible">
+    <div
+      className={'product-stage ' + mode}
+      role="group"
+      aria-label="Interactive 3D Astral Kin collectible"
+    >
       {supported === null ? (
         <div className="scene-loading skeleton" aria-hidden="true" />
       ) : supported ? (

@@ -7,13 +7,14 @@ import { useCampaign, useLoop } from './provider';
 import { useSearchParams } from 'next/navigation';
 import { KinArt } from './art';
 import { Button } from './ui';
+import { Pending } from './shell';
 type Session = { id: string; seed: number; mode: string };
 type Result = { won: boolean; score: number; accessId?: string };
 export default function Quest() {
   const campaignId = useSearchParams().get('campaign') || 'astral',
     query = campaignId === 'astral' ? '' : '?campaign=' + campaignId,
     data = useCampaign(campaignId),
-    { login, act, busy } = useLoop(),
+    { login, act, busy, loadFailed } = useLoop(),
     [mode, setMode] = useState<'run' | 'lore'>('run'),
     [session, setSession] = useState<Session | null>(null),
     [result, setResult] = useState<Result | null>(null),
@@ -116,6 +117,8 @@ export default function Quest() {
       if (r) setResult(r);
     }
   };
+  // The drop data failed to load: show the shared error state with a retry.
+  if (loadFailed) return <Pending />;
   const currentWave = Math.min(questConfig.waves - 1, Math.floor(tick / waveDuration)),
     w = wave(session?.seed ?? 0, currentWave),
     depth = (tick % waveDuration) / waveDuration;
@@ -123,9 +126,7 @@ export default function Quest() {
     <section className="wrap quest">
       <div className="quest-heading">
         <h1>{mode === 'run' ? 'The fragment run.' : 'The lore challenge.'}</h1>
-        <p className="lead">
-          Win to unlock one preorder slot. Free to play, no purchase needed.
-        </p>
+        <p className="lead">Win to unlock one preorder slot. Free to play, no purchase needed.</p>
         {data && (
           <p className="tries" role="status">
             {data.attemptsLeft > 0

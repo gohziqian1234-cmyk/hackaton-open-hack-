@@ -49,6 +49,38 @@ export function assertSameOrigin(request: Request) {
   if (originHost !== host) throw new DomainError('INVALID_ORIGIN', 403);
 }
 
+/**
+ * Reads at most `max` bytes of the body and stops the upload as soon as it is exceeded, so a
+ * chunked request without Content-Length can never make the server buffer an unbounded body.
+ */
+export async function readBody(request: Request, max: number) {
+  const declared = Number(request.headers.get('content-length') ?? 0);
+  if (declared > max) throw new DomainError('REQUEST_TOO_LARGE', 413);
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel().catch(() => undefined);
+      throw new DomainError('REQUEST_TOO_LARGE', 413);
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const c of chunks) {
+    body.set(c, offset);
+    offset += c.byteLength;
+  }
+  return body;
+}
+export const readText = async (request: Request, max: number) =>
+  new TextDecoder().decode(await readBody(request, max));
+
 export async function currentUser(service = new Loopbox(getDb())) {
   return service.identity((await cookies()).get(SESSION_COOKIE)?.value);
 }

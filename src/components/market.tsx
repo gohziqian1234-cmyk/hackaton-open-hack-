@@ -337,7 +337,12 @@ export function ListingPage() {
           </p>
           <Card className="stack">
             <h2 className="h3">What’s inside: stock and odds</h2>
-            <div className="table-scroll">
+            <div
+              className="table-scroll"
+              tabIndex={0}
+              role="region"
+              aria-label="Stock and odds table"
+            >
               <table className="data-table odds-table">
                 <caption className="visually-hidden">
                   Remaining stock per character and the chance of drawing it

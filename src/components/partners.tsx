@@ -102,10 +102,10 @@ export function PartnersLanding() {
         ))}
       </ol>
       <Card className="terms-card">
-        <h2 className="h3">What we take</h2>
+        <h2 className="h3">Revenue share</h2>
         <p>
-          30% of paid orders — draft terms. Payments run through LoopBox; payouts are settled
-          outside this demo.
+          You receive 30% of paid orders for your drop — draft terms, set with each partner.
+          Payments run through LoopBox; payouts are settled outside this demo.
         </p>
       </Card>
       <section className="apply" aria-labelledby="apply-heading">

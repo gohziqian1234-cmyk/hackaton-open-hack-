@@ -31,16 +31,15 @@ if (!hasColumn) {
 const now = Date.now();
 const existing = db.prepare('SELECT id FROM users WHERE email=?').get(email);
 if (existing) {
-  db.prepare("UPDATE users SET role='ADMIN',password_hash=?,failed_logins=0,locked_until=NULL WHERE id=?").run(
-    hashPassword(password),
-    existing.id,
-  );
+  db.prepare(
+    "UPDATE users SET role='ADMIN',password_hash=?,failed_logins=0,locked_until=NULL WHERE id=?",
+  ).run(hashPassword(password), existing.id);
   db.prepare('DELETE FROM sessions WHERE user_id=?').run(existing.id);
-  console.log(`Updated ${email}: role ADMIN, new password, all sessions signed out.`);
+  console.log('Updated the existing account: role ADMIN, new password, all sessions signed out.');
 } else {
   db.prepare(
     "INSERT INTO users (id,name,role,created_at,email,email_verified_at,password_hash) VALUES (?,?,'ADMIN',?,?,?,?)",
   ).run(randomUUID(), name, now, email, now, hashPassword(password));
-  console.log(`Created ADMIN ${email}.`);
+  console.log('Created the ADMIN account.');
 }
 db.close();

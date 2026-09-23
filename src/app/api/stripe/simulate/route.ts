@@ -1,5 +1,5 @@
 import { openService } from '../../../../server/app';
-import { assertSameOrigin, currentUser, failure, json } from '../../../../server/http';
+import { assertSameOrigin, currentUser, failure, json, readText } from '../../../../server/http';
 import { DomainError } from '../../../../server/service';
 import { simulateAllowed } from '../../../../server/stripe';
 import { simulateSchema } from '../../../../server/validation';
@@ -13,8 +13,7 @@ export async function POST(request: Request) {
     const service = openService();
     if (!simulateAllowed(service.demo)) throw new DomainError('NOT_FOUND', 404);
     assertSameOrigin(request);
-    const text = await request.text();
-    if (text.length > 1024) throw new DomainError('REQUEST_TOO_LARGE', 413);
+    const text = await readText(request, 1024);
     const parsed = simulateSchema.safeParse(JSON.parse(text));
     if (!parsed.success) throw new DomainError('INVALID_INPUT', 400);
     const user = await currentUser(service);

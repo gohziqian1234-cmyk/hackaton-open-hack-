@@ -8,6 +8,7 @@ import {
   assertSameOrigin,
   failure,
   json as response,
+  readText,
   sessionCookie,
 } from '../../../server/http';
 export const runtime = 'nodejs';
@@ -35,8 +36,7 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const jarToken = (await cookies()).get(SESSION_COOKIE)?.value;
     takeToken('post:' + clientKey(request, jarToken), 20, 60000);
-    const text = await request.text();
-    if (text.length > 8192) throw new DomainError('REQUEST_TOO_LARGE', 413);
+    const text = await readText(request, 8192);
     const parsed = actionSchema.safeParse(JSON.parse(text));
     if (!parsed.success) throw new DomainError('INVALID_INPUT', 400);
     const data = parsed.data;

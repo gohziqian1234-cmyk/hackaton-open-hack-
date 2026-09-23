@@ -1,7 +1,6 @@
 import { openService } from '../../../../server/app';
 import type Stripe from 'stripe';
-import { failure, json } from '../../../../server/http';
-import { DomainError } from '../../../../server/service';
+import { failure, json, readText } from '../../../../server/http';
 import { verifyWebhook } from '../../../../server/stripe';
 import { clientIp, takeToken } from '../../../../server/rate-limit';
 export const runtime = 'nodejs';
@@ -11,8 +10,7 @@ const HANDLED = ['checkout.session.completed', 'checkout.session.expired'];
 export async function POST(request: Request) {
   try {
     takeToken('webhook:' + clientIp(request), 300, 60000);
-    const raw = await request.text();
-    if (raw.length > 65536) throw new DomainError('REQUEST_TOO_LARGE', 413);
+    const raw = await readText(request, 65536);
     const event = verifyWebhook(raw, request.headers.get('stripe-signature'));
     if (!HANDLED.includes(event.type)) return json({ received: true, outcome: 'ignored' });
     const session = event.data.object as Stripe.Checkout.Session;

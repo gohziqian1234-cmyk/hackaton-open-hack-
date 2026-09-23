@@ -282,14 +282,12 @@ test('committed pool: 50 concurrent purchases across two processes for the last 
   // 45 purchases go through the web server process while this test process buys 5 directly
   // on its own database connection at the same moment.
   const http = Promise.all(
-    ids
-      .slice(0, 45)
-      .map((accessId) =>
-        page.request.post('/api/loopbox', {
-          headers: origin,
-          data: { action: 'preorder', accessId },
-        }),
-      ),
+    ids.slice(0, 45).map((accessId) =>
+      page.request.post('/api/loopbox', {
+        headers: origin,
+        data: { action: 'preorder', accessId },
+      }),
+    ),
   );
   const direct = new Loopbox(db, () => Date.now(), true);
   const directWins = ids.slice(45).filter((accessId) => {
@@ -488,5 +486,64 @@ test('marketplace: verify with demo codes, list a series with a photo, publish, 
   await expect(page.getByRole('link', { name: /Hawker Heroes Mini/ })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Photo of Hawker Heroes Mini' })).toBeVisible();
   await noOverflow(page);
+  expect(errors).toEqual([]);
+});
+
+test('every route fits a 390px phone without sideways scroll and passes axe', async ({ page }) => {
+  test.setTimeout(240000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const visits: [string | null, string[]][] = [
+    [
+      null,
+      [
+        '/',
+        '/drop',
+        '/login',
+        '/terms',
+        '/market',
+        '/market/lst-mei',
+        '/partners',
+        '/verify/astral',
+      ],
+    ],
+    [
+      'collector',
+      [
+        '/quest',
+        '/checkout',
+        '/checkout/success',
+        '/collection',
+        '/trades',
+        '/reveal/starter-eclipse',
+        '/sell',
+        '/orders',
+        '/orders/mko-seed',
+        '/orders/mko-seed/chat',
+        '/me',
+        '/me/verify',
+      ],
+    ],
+    ['mei', ['/sell/new']],
+    ['kopi', ['/partner', '/partner/campaign/kopi-kaki-s1', '/partner/campaign/new']],
+    ['admin', ['/studio']],
+  ];
+  for (const [user, routes] of visits) {
+    if (user) await login(page, user);
+    for (const route of routes) {
+      await page.goto(route);
+      await expect(page.locator('main h1').first()).toBeVisible();
+      await expect(page.locator('.skeleton-page')).toHaveCount(0);
+      await noOverflow(page);
+      const results = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+        .analyze();
+      expect(
+        results.violations.map((v) => ({ route, id: v.id, nodes: v.nodes.map((n) => n.target) })),
+      ).toEqual([]);
+    }
+  }
   expect(errors).toEqual([]);
 });

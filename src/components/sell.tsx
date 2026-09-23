@@ -128,7 +128,7 @@ export function SellerHome() {
           </Empty>
         )
       ) : (
-        <div className="table-scroll">
+        <div className="table-scroll" tabIndex={0} role="region" aria-label="Your listings table">
           <table className="data-table">
             <caption className="visually-hidden">Your listings</caption>
             <thead>
