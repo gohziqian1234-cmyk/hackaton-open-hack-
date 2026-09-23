@@ -466,12 +466,22 @@ export function BasketSuccess({ basket }: { basket: string }) {
             </li>
           ))}
         </ol>
-        <div className="row">
+        <div className="row center">
           <Button href="/collection">My collection</Button>
-          <Button href="/drops" variant="ghost">
-            Explore the drops
-          </Button>
+          {confirmed.length === 1 && confirmed[0].allocation_id ? (
+            <Button href={'/trades?allocation=' + confirmed[0].allocation_id} variant="ghost">
+              Find a trade
+            </Button>
+          ) : (
+            <Button href="/drops" variant="ghost">
+              Explore the drops
+            </Button>
+          )}
         </div>
+        <p className="note">
+          Changed your mind about which one you want? Swap it for another figure of the same
+          rarity in the trade room before the preorder closes.
+        </p>
       </section>
     );
   if (done)

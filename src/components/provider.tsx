@@ -158,6 +158,7 @@ export type Kin = Pick<CharacterInfo, 'id' | 'name' | 'rarity' | 'description'> 
   color: string;
   units: number;
   campaign_id: string;
+  slug?: string | null;
 };
 /** Character details from the database (partner series) with the built-in catalogue as fallback. */
 export function kinOf(data: Snapshot | null, id: string | undefined): Kin | undefined {
@@ -173,6 +174,7 @@ export function kinOf(data: Snapshot | null, id: string | undefined): Kin | unde
       color: row.color ?? base?.color ?? '#B7B0E0',
       units: row.units,
       campaign_id: row.campaign_id,
+      slug: row.slug,
     };
   return base ? { ...base, campaign_id: 'astral' } : undefined;
 }

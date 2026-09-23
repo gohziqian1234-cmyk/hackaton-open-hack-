@@ -47,9 +47,11 @@ test('golden path: quest, preorder, reveal, direct trade, final production', asy
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /A little mystery/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Collect the surprise/ })).toBeVisible();
   await page.screenshot({ path: resolve(screenshotDir, '01-home.png'), fullPage: true });
-  await page.getByRole('link', { name: 'Explore the drop', exact: true }).click();
+  await page.getByRole('link', { name: 'Explore the drops', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Drops', exact: true })).toBeVisible();
+  await page.locator('a[href="/drops/astral-kin"]').first().click();
   await expect(page.getByRole('heading', { name: 'Astral Kin™' })).toBeVisible();
   await expect(page.getByText('7 remaining', { exact: true })).toBeVisible();
   await page.screenshot({ path: resolve(screenshotDir, '02-drop.png'), fullPage: true });
@@ -61,16 +63,24 @@ test('golden path: quest, preorder, reveal, direct trade, final production', asy
   await page.getByRole('button', { name: /Access to one blind-box preorder/ }).click();
   await expect(page.getByRole('heading', { name: 'Quest cleared.' })).toBeVisible();
   await page.getByRole('link', { name: 'Claim preorder slot' }).click();
-  await page.getByRole('checkbox').check();
-  await page.screenshot({ path: resolve(screenshotDir, '03-checkout.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Pay with card' }).click();
+  // v2: open first (the server draws before the animation), pay at checkout afterwards.
   await page.getByRole('button', { name: 'Open my box' }).click();
+  await page.getByRole('button', { name: 'Skip' }).click();
   await expect(page.getByRole('heading', { name: 'Eclipse Knight' })).toBeVisible();
   await expect(page.getByText(/You have a duplicate/)).toBeVisible();
   await page.screenshot({ path: resolve(screenshotDir, '04-reveal.png'), fullPage: true });
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save card' }).click();
   expect((await downloadPromise).suggestedFilename()).toBe('loopbox-my-astral-kin.png');
+  await page.getByRole('link', { name: 'Keep it — go to checkout' }).click();
+  await expect(page.getByRole('heading', { name: 'Checkout', exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'I am 18 or older' }).check();
+  await page.screenshot({ path: resolve(screenshotDir, '03-checkout.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Checkout', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Are you sure you want these made?' })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'I understand these figures will be made just for me.' }).check();
+  await page.getByRole('button', { name: 'Yes, confirm & pay' }).click();
+  await expect(page.getByRole('heading', { name: 'Confirmed. You’re on the production list.' })).toBeVisible();
   await page.getByRole('link', { name: 'Find a trade', exact: true }).click();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Find my match' }).click();
@@ -501,6 +511,9 @@ test('every route fits a 390px phone without sideways scroll and passes axe', as
       [
         '/',
         '/drop',
+        '/drops',
+        '/drops/naruto',
+        '/drops/sanrio',
         '/login',
         '/terms',
         '/market',
@@ -545,5 +558,80 @@ test('every route fits a 390px phone without sideways scroll and passes axe', as
       ).toEqual([]);
     }
   }
+  expect(errors).toEqual([]);
+});
+
+test('v2 opening sequence: swipe, short swipe, keyboard, tap fallback, reduced motion; concept checkout', async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await login(page, 'collector');
+  const origin = { Origin: 'http://127.0.0.1:3100' };
+  const win = async (campaignId: string) =>
+    (
+      await (
+        await page.request.post('/api/loopbox', {
+          headers: origin,
+          data: { action: 'demoWin', campaignId },
+        })
+      ).json()
+    ).accessId as string;
+  const naruto = /^(Naruto Uzumaki|Sakura Haruno|Sasuke Uchiha|Itachi Uchiha)$/;
+  const edge = /^(Rebecca|David Martinez|Lucy)$/;
+  // 1. Swipe: a short stroke only wobbles the pack; a full stroke tears it open.
+  await page.goto('/open/' + (await win('naruto')));
+  await page.getByRole('button', { name: 'Open my box' }).click();
+  const pack = page.getByRole('button', { name: /Foil pack/ });
+  await expect(pack).toBeVisible();
+  await page.waitForTimeout(700);
+  let box = (await pack.boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.35, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByText('Swipe all the way across')).toBeVisible();
+  await page.waitForTimeout(500);
+  box = (await pack.boundingBox())!;
+  await page.mouse.move(box.x - 30, box.y + box.height * 0.4);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width + 30, box.y + box.height * 0.55, { steps: 14 });
+  await page.mouse.up();
+  await expect(page.getByRole('heading', { name: naruto })).toBeVisible();
+  await expect(page.getByText('Concept partner drop — demo only, not licensed').first()).toBeVisible();
+  // 2. Keyboard: Enter opens the box, Enter tears the pack.
+  await page.goto('/open/' + (await win('edgerunners')));
+  await expect(page.getByRole('button', { name: 'Open my box' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(pack).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: edge })).toBeVisible();
+  // 3. No swipe for five seconds: a plain button tears it instead.
+  await page.goto('/open/' + (await win('edgerunners')));
+  await page.getByRole('button', { name: 'Open my box' }).click();
+  await page.getByRole('button', { name: 'Tap here to tear instead' }).click({ timeout: 9000 });
+  await expect(page.getByRole('heading', { name: edge })).toBeVisible();
+  // 4. Reduced motion: no swipe, a "Tear open" button.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/open/' + (await win('naruto')));
+  await page.getByRole('button', { name: 'Open my box' }).click();
+  await page.getByRole('button', { name: 'Tear open' }).click();
+  await expect(page.getByRole('heading', { name: naruto })).toBeVisible();
+  // 5. Concept drops check out with a demo payment, never a card.
+  await page.goto('/checkout');
+  await expect(page.getByRole('checkbox', { name: /^Select / })).toHaveCount(4);
+  await page.getByRole('checkbox', { name: 'I am 18 or older' }).check();
+  await page.getByRole('button', { name: 'Checkout', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'I understand these figures will be made just for me.' }).check();
+  await page.getByRole('button', { name: 'Yes, confirm & pay' }).click();
+  await expect(page.getByRole('heading', { name: 'Demo payment' })).toBeVisible();
+  await expect(page.getByText('This is a concept drop. No money is charged.')).toBeVisible();
+  await page.getByRole('button', { name: 'Complete demo payment' }).click();
+  await expect(page.getByRole('heading', { name: 'Confirmed. You’re on the production list.' })).toBeVisible();
+  await expect(page.getByRole('img', { name: /figure from (Naruto|Cyberpunk: Edgerunners) \(concept render\)$/ })).toHaveCount(4);
+  const snap = await snapshot(page);
+  expect(snap.items.filter((i: { state: string }) => i.state === 'confirmed')).toHaveLength(4);
+  expect(snap.items.every((i: { payment_mode: string }) => i.payment_mode === 'demo')).toBe(true);
   expect(errors).toEqual([]);
 });

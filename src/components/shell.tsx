@@ -37,6 +37,14 @@ const navLinks = [
   { href: '/market', label: 'Marketplace' },
   { href: '/partners', label: 'For partners' },
 ];
+/** Short labels so footer links never share a name with the header navigation. */
+const footerLinks = [
+  { href: '/drops', label: 'All drops' },
+  { href: '/collection', label: 'Collection' },
+  { href: '/trades', label: 'Trades' },
+  { href: '/market', label: 'Market' },
+  { href: '/partners', label: 'Partners' },
+];
 const tabs = [
   { href: '/drops', label: 'Drops', icon: Box },
   { href: '/collection', label: 'Collection', icon: LayoutGrid },
@@ -149,7 +157,7 @@ function Frame({ children }: { children: React.ReactNode }) {
           </Link>
           <p className="footer-tag">Limited collectibles, made to confirmed demand.</p>
           <nav aria-label="Footer" className="footer-nav">
-            {navLinks.map((link) => (
+            {footerLinks.map((link) => (
               <Link key={link.href} href={link.href}>
                 {link.label}
               </Link>

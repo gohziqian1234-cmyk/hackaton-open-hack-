@@ -112,6 +112,7 @@ export type Snapshot = CoreSnapshot & {
 /** One opened slot: slot_won (an unused access) → opened → confirmed → in_production → shipped. */
 export interface OrderItem {
   id: string;
+  access_id: string;
   campaign_id: string;
   theme_slug: string | null;
   character_id: string;

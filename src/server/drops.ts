@@ -1,7 +1,7 @@
 // v2 Drops: theme browser data on top of the campaign engine (service → partners → market).
 import { randomUUID } from 'node:crypto';
 import type { SQLInputValue } from 'node:sqlite';
-import type { User, ThemeInfo, Snapshot, OrderItem } from '../lib/types';
+import type { User, ThemeInfo, Snapshot, OrderItem, CharacterInfo } from '../lib/types';
 import { DomainError } from './errors';
 import { Market } from './market';
 import { HELD_STATES, heldItemsSql } from './service';
@@ -217,7 +217,13 @@ export class Drops extends Market {
       );
       this.run("UPDATE access SET status='REDEEMED' WHERE id=?", a.id);
       this.audit(userId, 'item.opened', 'order_item', id, { campaign: c.id, position: unit.position });
-      return this.item(userId, id);
+      return {
+        ...this.item(userId, id),
+        character: this.one<CharacterInfo>(
+          'SELECT id,campaign_id,name,rarity,units,color,description,slug FROM characters WHERE id=?',
+          unit.character_id,
+        )!,
+      };
     });
   }
   /** One of the user's items, shaped for the client. */
@@ -228,7 +234,7 @@ export class Drops extends Market {
   }
   items(userId: string, itemId?: string): OrderItem[] {
     return this.all<Omit<OrderItem, 'pending'> & { pending: number }>(
-      `SELECT i.id,i.campaign_id,t.slug AS theme_slug,i.character_id,i.state,i.opened_at,i.reserved_until,i.confirmed_at,i.payment_mode,i.order_id,i.allocation_id,p.position,c.price,
+      `SELECT i.id,i.access_id,i.campaign_id,t.slug AS theme_slug,i.character_id,i.state,i.opened_at,i.reserved_until,i.confirmed_at,i.payment_mode,i.order_id,i.allocation_id,p.position,c.price,
         ${PENDING_FOR_ITEM} AS pending,
         (SELECT io.basket_id FROM item_orders io WHERE io.item_id=i.id ORDER BY io.created_at DESC LIMIT 1) AS basket_id
        FROM order_items i JOIN pool_units p ON p.id=i.pool_unit_id JOIN campaigns c ON c.id=i.campaign_id LEFT JOIN themes t ON t.campaign_id=i.campaign_id

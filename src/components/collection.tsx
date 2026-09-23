@@ -104,7 +104,7 @@ export function Collection() {
                       <button
                         className="icon-btn"
                         aria-label={'Download ' + ch.name + ' card'}
-                        onClick={() => downloadCard(ch.name, ch.rarity)}
+                        onClick={() => downloadCard(ch as never, null)}
                       >
                         <Download size={20} />
                       </button>
