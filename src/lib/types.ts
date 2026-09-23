@@ -102,8 +102,30 @@ export interface CampaignCard {
 }
 export type Snapshot = CoreSnapshot & {
   themes: ThemeInfo[];
+  /** Theme slugs the user asked to be notified about. */
   interest: string[];
+  /** The user's opened blind boxes and what happened to them (all drops). */
+  items: OrderItem[];
 };
+/** One opened slot: slot_won (an unused access) → opened → confirmed → in_production → shipped. */
+export interface OrderItem {
+  id: string;
+  campaign_id: string;
+  theme_slug: string | null;
+  character_id: string;
+  state: 'opened' | 'confirmed' | 'in_production' | 'shipped' | 'declined' | 'expired';
+  opened_at: number;
+  reserved_until: number;
+  confirmed_at: number | null;
+  payment_mode: 'stripe' | 'demo' | null;
+  /** A card payment for this item is open on Stripe right now. */
+  pending: boolean;
+  basket_id: string | null;
+  allocation_id: string | null;
+  order_id: string | null;
+  position: number;
+  price: number;
+}
 export interface CoreSnapshot {
   serverTime: number;
   campaign: Campaign;

@@ -1,4 +1,4 @@
-import { Discovery } from '../components/discovery';
-export default function Home() {
-  return <Discovery />;
+import { Home } from '../components/home';
+export default function Page() {
+  return <Home />;
 }

@@ -124,6 +124,6 @@ export class Drops extends Market {
   }
   snapshot(user: User | null, campaignId = 'astral'): Snapshot {
     const core = super.snapshot(user, campaignId);
-    return { ...core, themes: this.themes(), interest: [] };
+    return { ...core, themes: this.themes(), interest: [], items: [] };
   }
 }

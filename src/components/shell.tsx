@@ -1,7 +1,17 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Box, LayoutGrid, Menu, Repeat2, Store, UserRound, X } from 'lucide-react';
+import {
+  Box,
+  Instagram,
+  LayoutGrid,
+  Menu,
+  Repeat2,
+  Store,
+  Twitter,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Provider, useLoop } from './provider';
 import { ErrorNote, Skeleton } from './ui';
@@ -21,26 +31,29 @@ export function LogoMark() {
   );
 }
 const navLinks = [
-  { href: '/drop', label: 'The drop' },
+  { href: '/drops', label: 'Drops' },
   { href: '/collection', label: 'My collection' },
   { href: '/trades', label: 'Trade room' },
   { href: '/market', label: 'Marketplace' },
   { href: '/partners', label: 'For partners' },
 ];
 const tabs = [
-  { href: '/drop', label: 'Drop', icon: Box },
+  { href: '/drops', label: 'Drops', icon: Box },
   { href: '/collection', label: 'Collection', icon: LayoutGrid },
   { href: '/trades', label: 'Trades', icon: Repeat2 },
   { href: '/market', label: 'Market', icon: Store },
   { href: '/me', label: 'Me', icon: UserRound },
 ];
 const current = (path: string, href: string) =>
-  path === href || path.startsWith(href + '/') ? 'page' : undefined;
+  path === href || path.startsWith(href + '/') || (href === '/drops' && path === '/drop')
+    ? 'page'
+    : undefined;
 function Frame({ children }: { children: React.ReactNode }) {
   const path = usePathname(),
     router = useRouter(),
     { data, login } = useLoop(),
     [menu, setMenu] = useState(false);
+  const waiting = (data?.items ?? []).filter((i) => i.state === 'opened').length;
   const role = data?.user?.role,
     business = role === 'BUSINESS',
     admin = role === 'ADMIN',
@@ -72,6 +85,19 @@ function Frame({ children }: { children: React.ReactNode }) {
                 {link.label}
               </Link>
             ))}
+            <Link
+              href="/checkout"
+              className="nav-checkout"
+              aria-current={current(path, '/checkout')}
+              onClick={() => setMenu(false)}
+            >
+              Checkout
+              {waiting > 0 && (
+                <span className="nav-badge" aria-label={`${waiting} waiting`}>
+                  {waiting}
+                </span>
+              )}
+            </Link>
           </nav>
           <div className="site-header-end">
             {plain ? (
@@ -87,7 +113,7 @@ function Frame({ children }: { children: React.ReactNode }) {
                 onClick={async () => {
                   const toStudio = !business && !admin;
                   await login(toStudio ? 'business' : 'collector');
-                  router.push(toStudio ? '/studio' : '/drop');
+                  router.push(toStudio ? '/studio' : '/drops');
                 }}
               >
                 <b aria-hidden="true">{admin ? 'AD' : business ? 'AS' : other ? other[0] : 'A'}</b>
@@ -121,12 +147,23 @@ function Frame({ children }: { children: React.ReactNode }) {
             <LogoMark />
             loopbox
           </Link>
-          <p>
-            Limited collectibles, made to confirmed demand. Hackathon demo with no real payments.
-          </p>
-          <nav aria-label="Footer">
+          <p className="footer-tag">Limited collectibles, made to confirmed demand.</p>
+          <nav aria-label="Footer" className="footer-nav">
+            {navLinks.map((link) => (
+              <Link key={link.href} href={link.href}>
+                {link.label}
+              </Link>
+            ))}
             <Link href="/terms">Terms (draft)</Link>
           </nav>
+          <p className="footer-social">
+            <Instagram size={18} aria-hidden="true" />
+            <Twitter size={18} aria-hidden="true" />
+            <span>Social accounts open after the hackathon.</span>
+          </p>
+          <p className="footer-demo">
+            Hackathon demo — no real payments except the Astral Kin test drop.
+          </p>
         </div>
       </footer>
       <nav className="tabbar" aria-label="Tabs">
