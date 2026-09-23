@@ -86,7 +86,10 @@ export function PartnersLanding() {
       <div className="partner-types">
         <Card>
           <h2 className="h3">Brand collaborator</h2>
-          <p>You own an existing brand or licensed characters and want a low-risk limited run.</p>
+          <p>
+            You own an existing brand, or hold the rights to its characters, and want a low-risk
+            limited run.
+          </p>
         </Card>
         <Card>
           <h2 className="h3">Creator collective</h2>
@@ -255,7 +258,7 @@ function ApplicationForm({ note, onDone }: { note: string | null; onDone: () => 
         </label>
         <label className="consent">
           <input name="ipOwnership" type="checkbox" required />
-          <span>I confirm we own or have licensed every character in this series.</span>
+          <span>I confirm we own, or hold the rights to, every character in this series.</span>
         </label>
         <Button type="submit" disabled={busy}>
           Submit application

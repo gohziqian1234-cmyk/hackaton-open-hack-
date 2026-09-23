@@ -9,9 +9,9 @@ export default function Page() {
       </p>
       <h2>Before any real launch</h2>
       <p>
-        The team must get Singapore legal advice on chance-based paid boxes, preorders and refunds,
-        personal data, licensed characters, seller-declared stock and holding funds for sellers.
-        These terms will be written after that review.
+        The team must get advice from a Singapore lawyer on chance-based paid boxes, preorders and
+        refunds, personal data, character rights, seller-declared stock and holding funds for
+        sellers. These terms will be written after that review.
       </p>
       <h2>What we collect in the demo</h2>
       <p>

@@ -267,7 +267,7 @@ export function OrderPage() {
                 api({ orderId: order.id, kind: 'C2C' }, '/api/stripe/simulate').then(reload, reload)
               }
             >
-              Simulate payment
+              Simulate payment (demo)
             </Button>
           )}
         </Card>
