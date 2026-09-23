@@ -143,7 +143,7 @@ export class Loopbox {
   }
   demoIdentities() {
     if (!this.demo) return [];
-    const ids = ['collector', 'business', 'demo-0', 'kopi'];
+    const ids = ['collector', 'business', 'demo-0', 'kopi', 'mei', 'jun', 'priya'];
     if (process.env.ADMIN_DEMO !== 'false') ids.push('admin');
     return this.all<{ id: string; name: string; role: string }>(
       `SELECT id,name,role FROM users WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY rowid`,
@@ -152,7 +152,8 @@ export class Loopbox {
   }
   login(id: string) {
     if (!this.demo) throw new DomainError('DEMO_DISABLED', 403);
-    if (!this.demoIdentities().some((u) => u.id === id)) throw new DomainError('DEMO_DISABLED', 403);
+    if (!this.demoIdentities().some((u) => u.id === id))
+      throw new DomainError('DEMO_DISABLED', 403);
     this.user(id);
     return this.openSession(id);
   }
@@ -202,12 +203,15 @@ export class Loopbox {
   }
   /** Same error for unknown email and wrong password. Five failures lock the account 15 min. */
   signin(email: string, password: string) {
-    const u = this.one<{ id: string; password_hash: string | null; failed_logins: number; locked_until: number | null }>(
-      'SELECT id,password_hash,failed_logins,locked_until FROM users WHERE email=?',
-      email,
-    );
+    const u = this.one<{
+      id: string;
+      password_hash: string | null;
+      failed_logins: number;
+      locked_until: number | null;
+    }>('SELECT id,password_hash,failed_logins,locked_until FROM users WHERE email=?', email);
     const ok = verifyPassword(password, u?.password_hash);
-    if (u?.locked_until && u.locked_until > this.now()) throw new DomainError('ACCOUNT_LOCKED', 429);
+    if (u?.locked_until && u.locked_until > this.now())
+      throw new DomainError('ACCOUNT_LOCKED', 429);
     if (!u || !ok) {
       if (u)
         this.transaction(() => {
@@ -497,7 +501,10 @@ export class Loopbox {
     };
     if (o.status === 'EXPIRED') {
       // Paid after the seat was released: take it back only if a box is still free.
-      const c = this.one<{ phase: string }>('SELECT phase FROM campaigns WHERE id=?', o.campaign_id);
+      const c = this.one<{ phase: string }>(
+        'SELECT phase FROM campaigns WHERE id=?',
+        o.campaign_id,
+      );
       if (c?.phase !== 'ACTIVE_PREORDER') return refund();
       try {
         this.run("UPDATE orders SET status='PENDING_PAYMENT' WHERE id=?", orderId);
@@ -626,11 +633,17 @@ export class Loopbox {
       "SELECT o.id FROM orders o JOIN payments p ON p.kind='B2C' AND p.ref_id=o.id WHERE o.status='PENDING_PAYMENT' AND p.expires_at<=?",
       now,
     );
-    const slots = this.one("SELECT 1 FROM access WHERE status='AVAILABLE' AND expires_at<=? LIMIT 1", now);
+    const slots = this.one(
+      "SELECT 1 FROM access WHERE status='AVAILABLE' AND expires_at<=? LIMIT 1",
+      now,
+    );
     if (!orders.length && !slots) return;
     this.transaction(() => {
       for (const o of orders) this.release(o.id, 'session_expired');
-      this.run("UPDATE access SET status='EXPIRED' WHERE status='AVAILABLE' AND expires_at<=?", now);
+      this.run(
+        "UPDATE access SET status='EXPIRED' WHERE status='AVAILABLE' AND expires_at<=?",
+        now,
+      );
     });
   }
   /**
@@ -879,7 +892,10 @@ export class Loopbox {
           c.id,
         );
       if (next === 'ALLOCATION_LOCKED') {
-        this.run("UPDATE matches SET status='EXPIRED' WHERE status='PENDING' AND campaign_id=?", c.id);
+        this.run(
+          "UPDATE matches SET status='EXPIRED' WHERE status='PENDING' AND campaign_id=?",
+          c.id,
+        );
         this.run(
           'DELETE FROM preferences WHERE allocation_id IN (SELECT id FROM allocations WHERE campaign_id=?)',
           c.id,
@@ -1003,10 +1019,13 @@ export class Loopbox {
   /** ADMIN: expire stale reservations and re-run trade matching (FIFO). */
   sweep(adminId: string) {
     this.admin(adminId);
-    const before = this.one<{ n: number }>("SELECT COUNT(*) AS n FROM orders WHERE status='EXPIRED'")!.n;
+    const before = this.one<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM orders WHERE status='EXPIRED'",
+    )!.n;
     this.sweepExpired();
     const expired =
-      this.one<{ n: number }>("SELECT COUNT(*) AS n FROM orders WHERE status='EXPIRED'")!.n - before;
+      this.one<{ n: number }>("SELECT COUNT(*) AS n FROM orders WHERE status='EXPIRED'")!.n -
+      before;
     const matched = this.transaction(() => {
       let n = 0;
       const open = this.all<{ id: string; campaign_id: string }>(
@@ -1016,7 +1035,9 @@ export class Loopbox {
       return n;
     });
     const extra = this.sweepMore();
-    this.transaction(() => this.audit(adminId, 'admin.sweep', 'system', 'sweep', { expired, matched, ...extra }));
+    this.transaction(() =>
+      this.audit(adminId, 'admin.sweep', 'system', 'sweep', { expired, matched, ...extra }),
+    );
     return { expired, matched, ...extra };
   }
   /** Extra sweep work added by later services (marketplace auto-complete). */
@@ -1121,7 +1142,11 @@ export class Loopbox {
         id,
         id,
       ),
-      waitlisted: !!this.one('SELECT user_id FROM waitlist WHERE user_id=? AND campaign_id=?', id, c.id),
+      waitlisted: !!this.one(
+        'SELECT user_id FROM waitlist WHERE user_id=? AND campaign_id=?',
+        id,
+        c.id,
+      ),
       orders: this.all<OrderSummary>(
         "SELECT o.id,o.campaign_id,o.status,o.created_at,a.id AS allocation_id,p.stripe_session_id AS session_id,p.expires_at FROM orders o LEFT JOIN allocations a ON a.order_id=o.id LEFT JOIN payments p ON p.kind='B2C' AND p.ref_id=o.id WHERE o.user_id=? ORDER BY o.created_at DESC LIMIT 10",
         id,

@@ -15,7 +15,8 @@ const messages: Record<string, string> = {
   INVALID_RUN: 'We couldn’t validate this run. Please play the full quest and try again.',
   ALLOCATION_UNAVAILABLE: 'This collectible is already reserved or locked.',
   TRY_AGAIN_SHORTLY: 'Take a short breather, then try again.',
-  ATTEMPT_LIMIT: 'You have used all your tries for today. Come back after midnight, Singapore time.',
+  ATTEMPT_LIMIT:
+    'You have used all your tries for today. Come back after midnight, Singapore time.',
   BUSINESS_ONLY: 'Open the demo studio account to use this control.',
   DEMO_DISABLED: 'Demo sign-in is disabled on this installation.',
   AGE_CONFIRMATION_REQUIRED: 'Please confirm you are 18 or older to buy a box.',
@@ -30,7 +31,21 @@ const messages: Record<string, string> = {
   INVALID_STATE: 'That step isn’t possible in the campaign’s current phase.',
   VALIDATION_FAILED: 'Some details don’t add up. Check the numbers and try again.',
   NOT_FOUND: 'We couldn’t find that.',
+  CANNOT_BUY_OWN: 'You can’t buy boxes from your own listing.',
+  VERIFICATION_REQUIRED: 'Verify your email and phone before selling.',
+  UNSUPPORTED_IMAGE: 'Photos must be PNG, JPEG or WebP images.',
+  REQUEST_TOO_LARGE: 'That file is too large. Photos can be up to 2 MB.',
+  OTP_LOCKED: 'Too many wrong codes. Send a new code and try again.',
+  OTP_EXPIRED: 'That code has expired. Send a new one.',
+  OTP_NOT_FOUND: 'Send a code first, then enter it here.',
+  EMAIL_TAKEN: 'That email is already used by another account.',
+  SUSPENDED: 'This listing is suspended. Contact support.',
+  LOCKED_AFTER_LIVE: 'This is live, so those details are locked.',
+  INVALID_INPUT: 'Some details are missing or in the wrong format.',
+  INVALID_ORIGIN: 'Refresh the page and try again.',
 };
+export const messageFor = (code: string) =>
+  messages[code] || 'We couldn’t complete that action. Refresh and try again.';
 export async function api<T>(data?: unknown, url = '/api/loopbox'): Promise<T> {
   const r = await fetch(url, {
     method: data ? 'POST' : 'GET',
@@ -39,10 +54,7 @@ export async function api<T>(data?: unknown, url = '/api/loopbox'): Promise<T> {
     cache: 'no-store',
   });
   const json = await r.json();
-  if (!r.ok)
-    throw new Error(
-      messages[json.error] || 'We couldn’t complete that action. Refresh and try again.',
-    );
+  if (!r.ok) throw Object.assign(new Error(messageFor(json.error)), { code: json.error as string });
   return json as T;
 }
 type Context = {

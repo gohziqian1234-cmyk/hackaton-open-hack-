@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { seedPartnerDemo } from './demo-data';
+import { seedMarketDemo, seedPartnerDemo } from './demo-data';
 
 export const pragmas = `
 PRAGMA foreign_keys=ON;
@@ -37,7 +37,8 @@ function hasColumn(db: DatabaseSync, table: string, column: string) {
   );
 }
 function addColumn(db: DatabaseSync, table: string, column: string, definition: string) {
-  if (!hasColumn(db, table, column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  if (!hasColumn(db, table, column))
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 /**
@@ -66,6 +67,14 @@ export const guardTriggers: [string, string][] = [
     "CREATE TRIGGER IF NOT EXISTS commitment_no_delete BEFORE DELETE ON fairness_commitments BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
   ],
   [
+    'c2c_draws_no_update',
+    "CREATE TRIGGER IF NOT EXISTS c2c_draws_no_update BEFORE UPDATE ON c2c_draws BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
+  ],
+  [
+    'c2c_draws_no_delete',
+    "CREATE TRIGGER IF NOT EXISTS c2c_draws_no_delete BEFORE DELETE ON c2c_draws BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
+  ],
+  [
     'audit_no_update',
     "CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
   ],
@@ -80,9 +89,9 @@ const createGuards = (db: DatabaseSync, names: string[]) =>
 /** Removes every row from every table (demo reset). Caller must have foreign keys off. */
 export function wipeAll(db: DatabaseSync) {
   const present = new Set(
-    (db.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all() as { name: string }[]).map(
-      (t) => t.name,
-    ),
+    (
+      db.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all() as { name: string }[]
+    ).map((t) => t.name),
   );
   const guards = guardTriggers.filter(([name]) => present.has(name));
   for (const [name] of guards) db.exec(`DROP TRIGGER ${name}`);
@@ -100,9 +109,24 @@ export const migrations: Migration[] = [
     id: 2,
     name: 'M3 game settings and attempt tracking',
     up: (db) => {
-      addColumn(db, 'campaigns', 'required_score', 'INTEGER NOT NULL DEFAULT 10 CHECK(required_score BETWEEN 1 AND 15)');
-      addColumn(db, 'campaigns', 'attempts_per_day', 'INTEGER NOT NULL DEFAULT 5 CHECK(attempts_per_day BETWEEN 1 AND 20)');
-      addColumn(db, 'campaigns', 'game_mode', "TEXT NOT NULL DEFAULT 'run' CHECK(game_mode IN ('run','lore'))");
+      addColumn(
+        db,
+        'campaigns',
+        'required_score',
+        'INTEGER NOT NULL DEFAULT 10 CHECK(required_score BETWEEN 1 AND 15)',
+      );
+      addColumn(
+        db,
+        'campaigns',
+        'attempts_per_day',
+        'INTEGER NOT NULL DEFAULT 5 CHECK(attempts_per_day BETWEEN 1 AND 20)',
+      );
+      addColumn(
+        db,
+        'campaigns',
+        'game_mode',
+        "TEXT NOT NULL DEFAULT 'run' CHECK(game_mode IN ('run','lore'))",
+      );
       addColumn(db, 'game_sessions', 'won', 'INTEGER NOT NULL DEFAULT 0 CHECK(won IN (0,1))');
       db.exec(`UPDATE game_sessions SET won=1 WHERE completed_at IS NOT NULL AND ((mode='run' AND score>=10) OR (mode='lore' AND score=3));
         CREATE INDEX IF NOT EXISTS game_sessions_attempts ON game_sessions(user_id,campaign_id,started_at);`);
@@ -120,7 +144,9 @@ CREATE TABLE IF NOT EXISTS pool_units(id TEXT PRIMARY KEY,campaign_id TEXT NOT N
 CREATE INDEX IF NOT EXISTS pool_units_next ON pool_units(campaign_id,allocated,position);
 CREATE TABLE IF NOT EXISTS fairness_commitments(campaign_id TEXT PRIMARY KEY REFERENCES campaigns(id),commitment_hex TEXT NOT NULL CHECK(length(commitment_hex)=64),seed_hex TEXT NOT NULL CHECK(length(seed_hex)=64),committed_at INTEGER NOT NULL,revealed_at INTEGER,created_at INTEGER NOT NULL);`);
       addColumn(db, 'allocations', 'pool_unit_id', 'TEXT REFERENCES pool_units(id)');
-      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS allocations_pool_unit ON allocations(pool_unit_id)');
+      db.exec(
+        'CREATE UNIQUE INDEX IF NOT EXISTS allocations_pool_unit ON allocations(pool_unit_id)',
+      );
       createGuards(db, [
         'pool_units_fixed',
         'pool_units_no_unallocate',
@@ -196,25 +222,26 @@ ALTER TABLE campaigns_v5 RENAME TO campaigns;
 CREATE TRIGGER capacity_guard BEFORE INSERT ON orders WHEN NEW.status IN ('PENDING_PAYMENT','PAID','DEMO_PAID') BEGIN SELECT CASE WHEN (SELECT COUNT(*) FROM orders WHERE campaign_id=NEW.campaign_id AND status IN ('PENDING_PAYMENT','PAID','DEMO_PAID'))>=(SELECT capacity FROM campaigns WHERE id=NEW.campaign_id) THEN RAISE(ABORT,'SOLD_OUT') END; END;
 CREATE TRIGGER capacity_guard_revive BEFORE UPDATE OF status ON orders WHEN NEW.status IN ('PENDING_PAYMENT','PAID','DEMO_PAID') AND OLD.status NOT IN ('PENDING_PAYMENT','PAID','DEMO_PAID') BEGIN SELECT CASE WHEN (SELECT COUNT(*) FROM orders WHERE campaign_id=NEW.campaign_id AND status IN ('PENDING_PAYMENT','PAID','DEMO_PAID'))>=(SELECT capacity FROM campaigns WHERE id=NEW.campaign_id) THEN RAISE(ABORT,'SOLD_OUT') END; END;`);
       // Each v1 business becomes a Brand partner owned by its business user.
-      const owner = db.prepare("SELECT id FROM users WHERE role='BUSINESS' ORDER BY created_at,id LIMIT 1").get() as
-        | { id: string }
-        | undefined;
+      const owner = db
+        .prepare("SELECT id FROM users WHERE role='BUSINESS' ORDER BY created_at,id LIMIT 1")
+        .get() as { id: string } | undefined;
       if (owner)
-        for (const b of db.prepare('SELECT id,name FROM businesses').all() as { id: string; name: string }[]) {
-          db.prepare('INSERT OR IGNORE INTO partners (id,name,type,owner_user_id,created_at) VALUES (?,?,?,?,?)').run(
-            b.id,
-            b.name,
-            'BRAND',
-            owner.id,
-            now,
-          );
+        for (const b of db.prepare('SELECT id,name FROM businesses').all() as {
+          id: string;
+          name: string;
+        }[]) {
+          db.prepare(
+            'INSERT OR IGNORE INTO partners (id,name,type,owner_user_id,created_at) VALUES (?,?,?,?,?)',
+          ).run(b.id, b.name, 'BRAND', owner.id, now);
           db.prepare(
             'INSERT OR IGNORE INTO partner_members (partner_id,user_id,role,created_at) VALUES (?,?,?,?)',
           ).run(b.id, owner.id, 'OWNER', now);
           db.prepare('UPDATE campaigns SET partner_id=? WHERE business_id=?').run(b.id, b.id);
         }
       if (db.prepare("SELECT 1 FROM users WHERE id='collector'").get())
-        db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('admin','Admin','ADMIN',?)").run(now);
+        db.prepare(
+          "INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('admin','Admin','ADMIN',?)",
+        ).run(now);
     },
   },
   {
@@ -227,7 +254,9 @@ CREATE TRIGGER capacity_guard_revive BEFORE UPDATE OF status ON orders WHEN NEW.
       addColumn(db, 'sessions', 'created_at', 'INTEGER NOT NULL DEFAULT 0');
       // Tokens used to be stored as-is. They are now stored as SHA-256 hashes, so old rows
       // can never match again: sign everyone out once.
-      db.exec('DELETE FROM sessions; CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);');
+      db.exec(
+        'DELETE FROM sessions; CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);',
+      );
     },
   },
   {
@@ -237,13 +266,41 @@ CREATE TRIGGER capacity_guard_revive BEFORE UPDATE OF status ON orders WHEN NEW.
       db.exec(`
 CREATE TABLE IF NOT EXISTS partner_applications(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),type TEXT NOT NULL CHECK(type IN ('BRAND','COLLECTIVE')),org_name TEXT NOT NULL CHECK(length(org_name) BETWEEN 2 AND 80),contact_email TEXT NOT NULL,website TEXT,proof_url TEXT,portfolio_url TEXT,members_count INTEGER CHECK(members_count IS NULL OR members_count BETWEEN 2 AND 500),proposed_series TEXT NOT NULL,ip_statement TEXT NOT NULL CHECK(length(ip_statement)>=20),status TEXT NOT NULL CHECK(status IN ('SUBMITTED','APPROVED','REJECTED','INFO_REQUESTED')),admin_note TEXT,partner_id TEXT REFERENCES partners(id),created_at INTEGER NOT NULL,decided_at INTEGER);
 CREATE INDEX IF NOT EXISTS partner_applications_user ON partner_applications(user_id,status);`);
-      if (db.prepare("SELECT 1 FROM users WHERE id='collector'").get()) seedPartnerDemo(db, Date.now());
+      if (db.prepare("SELECT 1 FROM users WHERE id='collector'").get())
+        seedPartnerDemo(db, Date.now());
+    },
+  },
+  {
+    id: 8,
+    name: 'M8 creator marketplace',
+    up: (db) => {
+      db.exec(`
+CREATE TABLE IF NOT EXISTS otp_codes(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),channel TEXT NOT NULL CHECK(channel IN ('EMAIL','PHONE')),target TEXT NOT NULL,code_hash TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts>=0),expires_at INTEGER NOT NULL,consumed_at INTEGER,created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS otp_user ON otp_codes(user_id,channel,created_at);
+CREATE TABLE IF NOT EXISTS listings(id TEXT PRIMARY KEY,seller_id TEXT NOT NULL REFERENCES users(id),title TEXT NOT NULL CHECK(length(title) BETWEEN 4 AND 80),theme TEXT NOT NULL CHECK(length(theme) BETWEEN 2 AND 30),description TEXT NOT NULL CHECK(length(description) <= 1000),price_cents INTEGER NOT NULL CHECK(price_cents BETWEEN 100 AND 100000),fulfilment TEXT NOT NULL CHECK(fulfilment IN ('SHIP','MEETUP','BOTH')),status TEXT NOT NULL CHECK(status IN ('DRAFT','ACTIVE','SOLD_OUT','PAUSED','SUSPENDED')),created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS listings_status ON listings(status,created_at);
+CREATE INDEX IF NOT EXISTS listings_seller ON listings(seller_id);
+CREATE TABLE IF NOT EXISTS listing_characters(id TEXT PRIMARY KEY,listing_id TEXT NOT NULL REFERENCES listings(id),position INTEGER NOT NULL,name TEXT NOT NULL CHECK(length(name) BETWEEN 2 AND 40),rarity TEXT NOT NULL CHECK(rarity IN ('COMMON','RARE','SECRET')),color TEXT,declared INTEGER NOT NULL CHECK(declared BETWEEN 1 AND 500),remaining INTEGER NOT NULL CHECK(remaining>=0 AND remaining<=declared),image_path TEXT,UNIQUE(listing_id,position));
+CREATE TABLE IF NOT EXISTS listing_photos(id TEXT PRIMARY KEY,listing_id TEXT REFERENCES listings(id),uploader_id TEXT NOT NULL REFERENCES users(id),path TEXT NOT NULL,mime TEXT NOT NULL CHECK(mime IN ('image/png','image/jpeg','image/webp')),bytes INTEGER NOT NULL CHECK(bytes BETWEEN 1 AND 2097152),created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS listing_photos_listing ON listing_photos(listing_id);
+CREATE TABLE IF NOT EXISTS market_orders(id TEXT PRIMARY KEY,listing_id TEXT NOT NULL REFERENCES listings(id),buyer_id TEXT NOT NULL REFERENCES users(id),seller_id TEXT NOT NULL REFERENCES users(id),quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 10),subtotal_cents INTEGER NOT NULL CHECK(subtotal_cents>0),fee_cents INTEGER NOT NULL CHECK(fee_cents>=0),seller_owed_cents INTEGER NOT NULL CHECK(seller_owed_cents>=0),status TEXT NOT NULL CHECK(status IN ('PENDING_PAYMENT','PAID_HELD','FULFILLED','COMPLETED','REPORTED','RESOLVED','REFUNDED','EXPIRED')),payout_status TEXT NOT NULL CHECK(payout_status IN ('NONE','HELD','OWED','VOID')),fulfilment_note TEXT,created_at INTEGER NOT NULL,paid_at INTEGER,fulfilled_at INTEGER,completed_at INTEGER,CHECK(buyer_id<>seller_id),CHECK(subtotal_cents = fee_cents + seller_owed_cents));
+CREATE INDEX IF NOT EXISTS market_orders_buyer ON market_orders(buyer_id,created_at);
+CREATE INDEX IF NOT EXISTS market_orders_seller ON market_orders(seller_id,created_at);
+CREATE TABLE IF NOT EXISTS c2c_draws(id TEXT PRIMARY KEY,market_order_id TEXT NOT NULL REFERENCES market_orders(id),box_index INTEGER NOT NULL CHECK(box_index>=1),listing_character_id TEXT NOT NULL REFERENCES listing_characters(id),random_value INTEGER NOT NULL,total INTEGER NOT NULL,stock_snapshot TEXT NOT NULL,created_at INTEGER NOT NULL,UNIQUE(market_order_id,box_index));
+CREATE TABLE IF NOT EXISTS chat_threads(id TEXT PRIMARY KEY,market_order_id TEXT NOT NULL UNIQUE REFERENCES market_orders(id),buyer_id TEXT NOT NULL REFERENCES users(id),seller_id TEXT NOT NULL REFERENCES users(id),created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS chat_messages(id TEXT PRIMARY KEY,thread_id TEXT NOT NULL REFERENCES chat_threads(id),sender_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 1000),created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS chat_messages_thread ON chat_messages(thread_id,created_at);
+CREATE TABLE IF NOT EXISTS reports(id TEXT PRIMARY KEY,market_order_id TEXT NOT NULL REFERENCES market_orders(id),reporter_id TEXT NOT NULL REFERENCES users(id),reason TEXT NOT NULL CHECK(reason IN ('WRONG_ITEM','MISSING_ITEM','NOT_DELIVERED','OTHER')),details TEXT,status TEXT NOT NULL CHECK(status IN ('OPEN','UPHELD','DISMISSED')),created_at INTEGER NOT NULL,resolved_at INTEGER);`);
+      createGuards(db, ['c2c_draws_no_update', 'c2c_draws_no_delete']);
+      if (db.prepare("SELECT 1 FROM users WHERE id='collector'").get())
+        seedMarketDemo(db, Date.now());
     },
   },
 ];
 
 export function migrate(db: DatabaseSync) {
-  const version = () => (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+  const version = () =>
+    (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
   if (version() >= migrations[migrations.length - 1].id) return;
   // Table rebuilds need foreign keys off; they are re-checked before each commit.
   db.exec('PRAGMA foreign_keys=OFF');

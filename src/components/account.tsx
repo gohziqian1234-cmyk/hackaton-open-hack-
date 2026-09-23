@@ -3,7 +3,11 @@ import { useRouter } from 'next/navigation';
 import { useLoop } from './provider';
 import { Pending } from './shell';
 import { Button, Card } from './ui';
-const home: Record<string, string> = { COLLECTOR: '/collection', BUSINESS: '/partner', ADMIN: '/studio' };
+const home: Record<string, string> = {
+  COLLECTOR: '/collection',
+  BUSINESS: '/partner',
+  ADMIN: '/studio',
+};
 const describe: Record<string, string> = {
   COLLECTOR: 'You are signed in as a collector.',
   BUSINESS: 'You are signed in as a partner.',
@@ -39,7 +43,7 @@ export function Account() {
                 ? 'Publish drops, decide applications, read the audit trail.'
                 : user.role === 'BUSINESS'
                   ? 'Draft campaigns, follow sales and download manifests.'
-                  : 'Play drops, open boxes and trade duplicates.'}
+                  : 'Play drops, open boxes, trade duplicates and buy from creators.'}
             </p>
             <div className="row">
               {user.role === 'COLLECTOR' && (
@@ -49,6 +53,15 @@ export function Account() {
                   </Button>
                   <Button href="/trades" variant="ghost">
                     Trade room
+                  </Button>
+                  <Button href="/orders" variant="ghost">
+                    My orders
+                  </Button>
+                  <Button href="/sell" variant="ghost">
+                    Sell on the marketplace
+                  </Button>
+                  <Button href="/me/verify" variant="ghost">
+                    Verification
                   </Button>
                   <Button href="/partners" variant="ghost">
                     Become a partner

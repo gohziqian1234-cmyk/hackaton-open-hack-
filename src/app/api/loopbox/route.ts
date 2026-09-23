@@ -114,6 +114,30 @@ export async function POST(request: Request) {
         return response(service.edit(user.id, data.changes));
       case 'waitlist':
         return response(service.waitlist(user.id, data.campaignId));
+      case 'sendOtp':
+        return response(service.sendOtp(user.id, data.channel, data.target));
+      case 'verifyOtp':
+        return response(service.verifyOtp(user.id, data.channel, data.code));
+      case 'saveListing':
+        return response(service.saveListing(user.id, data.listing));
+      case 'publishListing':
+        return response(service.publishListing(user.id, data.listingId));
+      case 'pauseListing':
+        return response(service.pauseListing(user.id, data.listingId));
+      case 'buyListing':
+        return response(
+          await service.buyListing(user.id, data.listingId, data.quantity, data.ageConfirmed),
+        );
+      case 'fulfil':
+        return response(service.fulfil(user.id, data.orderId, data.note));
+      case 'confirmReceipt':
+        return response(service.confirmReceipt(user.id, data.orderId));
+      case 'report':
+        return response(service.report(user.id, data.orderId, data.reason, data.details));
+      case 'resolveReport':
+        return response(await service.resolveReport(user.id, data.reportId, data.decision));
+      case 'sendMessage':
+        return response(service.sendMessage(user.id, data.threadId, data.body));
     }
   } catch (e) {
     return failure(e);

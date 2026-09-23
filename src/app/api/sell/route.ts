@@ -4,20 +4,17 @@ import { DomainError } from '../../../server/service';
 import { clientIp, takeToken } from '../../../server/rate-limit';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-/** ADMIN console data. Every read checks the ADMIN role in the service. */
+/** GET /api/sell → your verification status, listings and money (held, owed, platform fees). */
 export async function GET(request: Request) {
   try {
-    takeToken('admin:' + clientIp(request), 60, 60000);
+    takeToken('sell:' + clientIp(request), 60, 60000);
     const service = openService();
     const user = await currentUser(service);
     if (!user) throw new DomainError('SIGN_IN_REQUIRED', 401);
-    const entity = new URL(request.url).searchParams.get('entity') || undefined;
-    if (entity && !/^[a-z_]{1,32}$/.test(entity)) throw new DomainError('INVALID_INPUT', 400);
     return json({
-      campaigns: service.adminCampaigns(user.id),
-      audit: service.auditLog(user.id, entity),
-      applications: service.applications(user.id),
-      reports: service.reports(user.id),
+      role: user.role,
+      verification: service.verificationStatus(user.id),
+      ...service.sellerDashboard(user.id),
     });
   } catch (e) {
     return failure(e);

@@ -20,7 +20,9 @@ export function newSeedHex() {
 
 /** Step i of Fisher–Yates picks j = HMAC-SHA256(key = seed bytes, message = "i:<i>") mod (i + 1). */
 export function stepIndex(seedHex: string, i: number) {
-  const mac = createHmac('sha256', Buffer.from(seedHex, 'hex')).update('i:' + i).digest('hex');
+  const mac = createHmac('sha256', Buffer.from(seedHex, 'hex'))
+    .update('i:' + i)
+    .digest('hex');
   return Number(BigInt('0x' + mac) % BigInt(i + 1));
 }
 

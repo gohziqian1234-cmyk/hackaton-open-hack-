@@ -4,21 +4,22 @@ import { DomainError } from '../../../server/service';
 import { clientIp, takeToken } from '../../../server/rate-limit';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-/** ADMIN console data. Every read checks the ADMIN role in the service. */
+/**
+ * GET /api/orders        → your marketplace orders, buying and selling
+ * GET /api/orders?id=mko → one order; only its buyer, its seller or an admin (404 otherwise)
+ */
 export async function GET(request: Request) {
   try {
-    takeToken('admin:' + clientIp(request), 60, 60000);
+    takeToken('orders:' + clientIp(request), 120, 60000);
     const service = openService();
     const user = await currentUser(service);
     if (!user) throw new DomainError('SIGN_IN_REQUIRED', 401);
-    const entity = new URL(request.url).searchParams.get('entity') || undefined;
-    if (entity && !/^[a-z_]{1,32}$/.test(entity)) throw new DomainError('INVALID_INPUT', 400);
-    return json({
-      campaigns: service.adminCampaigns(user.id),
-      audit: service.auditLog(user.id, entity),
-      applications: service.applications(user.id),
-      reports: service.reports(user.id),
-    });
+    const id = new URL(request.url).searchParams.get('id');
+    if (id) {
+      if (!/^mko-[a-z0-9-]{1,40}$/.test(id)) throw new DomainError('NOT_FOUND', 404);
+      return json(service.orderView(user.id, id));
+    }
+    return json(service.myMarketOrders(user.id));
   } catch (e) {
     return failure(e);
   }

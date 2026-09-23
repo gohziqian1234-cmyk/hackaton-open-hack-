@@ -22,7 +22,30 @@ type ApplicationRow = {
   admin_note: string | null;
   created_at: number;
 };
-type Console = { campaigns: AdminCampaign[]; audit: AuditRow[]; applications: ApplicationRow[] };
+type ReportRow = {
+  id: string;
+  reason: string;
+  details: string | null;
+  status: 'OPEN' | 'UPHELD' | 'DISMISSED';
+  created_at: number;
+  market_order_id: string;
+  title: string;
+  seller: string;
+  trust: number;
+  subtotal_cents: number;
+};
+type Console = {
+  campaigns: AdminCampaign[];
+  audit: AuditRow[];
+  applications: ApplicationRow[];
+  reports: ReportRow[];
+};
+const reportReasons: Record<string, string> = {
+  WRONG_ITEM: 'Different character',
+  MISSING_ITEM: 'Something missing',
+  NOT_DELIVERED: 'Nothing arrived',
+  OTHER: 'Other',
+};
 const ENTITIES = [
   '',
   'order',
@@ -91,7 +114,7 @@ export function AdminConsole({ extra }: { extra?: React.ReactNode }) {
         <Stat label="Campaigns" value={data.campaigns.length} />
         <Stat label="Live now" value={live} />
         <Stat label="Unpaid orders" value={data.campaigns.reduce((n, c) => n + c.pending, 0)} />
-        <Stat label="Audit rows shown" value={data.audit.length} />
+        <Stat label="Open reports" value={data.reports.filter((r) => r.status === 'OPEN').length} />
       </dl>
       <section className="card console-section" aria-labelledby="campaigns-heading">
         <h2 id="campaigns-heading" className="h3">
@@ -182,7 +205,10 @@ export function AdminConsole({ extra }: { extra?: React.ReactNode }) {
           <h2 id="sweep-heading" className="h3">
             Sweep
           </h2>
-          <p>Expires unpaid orders past their payment window and re-runs trade matching.</p>
+          <p>
+            Expires unpaid orders past their payment window, re-runs trade matching and completes
+            marketplace orders handed over more than 7 days ago.
+          </p>
           {swept && (
             <p className="note" role="status">
               {swept}
@@ -296,6 +322,55 @@ export function AdminConsole({ extra }: { extra?: React.ReactNode }) {
                 )}
                 {a.admin_note && a.status !== 'SUBMITTED' && (
                   <p className="note">Note: {a.admin_note}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section className="card console-section" aria-labelledby="reports-heading">
+        <h2 id="reports-heading" className="h3">
+          Marketplace reports
+        </h2>
+        {data.reports.length === 0 ? (
+          <p>No reports. Buyers report here when a box doesn’t match its draw.</p>
+        ) : (
+          <ul className="application-list">
+            {data.reports.map((r) => (
+              <li key={r.id} className="application">
+                <div className="section-head">
+                  <div>
+                    <strong>{r.title}</strong>
+                    <span className="cell-sub">
+                      Seller {r.seller} · trust {r.trust} · {sgd(r.subtotal_cents)}
+                    </span>
+                  </div>
+                  <span className="phase-chip">{r.status.toLowerCase()}</span>
+                </div>
+                <p>
+                  {reportReasons[r.reason] ?? r.reason}
+                  {r.details ? `: ${r.details}` : ''}
+                </p>
+                {r.status === 'OPEN' && (
+                  <div className="row table-actions">
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        run({ action: 'resolveReport', reportId: r.id, decision: 'UPHOLD' })
+                      }
+                    >
+                      Uphold and refund
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() =>
+                        run({ action: 'resolveReport', reportId: r.id, decision: 'DISMISS' })
+                      }
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
                 )}
               </li>
             ))}

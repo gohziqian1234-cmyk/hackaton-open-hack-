@@ -97,7 +97,9 @@ test('golden path: quest, preorder, reveal, direct trade, final production', asy
   await page.getByRole('link', { name: 'Download manifest' }).click();
   const manifest = await manifestDownload;
   expect(manifest.suggestedFilename()).toMatch(/^manifest-astral-\d{8}\.csv$/);
-  const manifestRows = readFileSync(await manifest.path(), 'utf8').trim().split('\r\n');
+  const manifestRows = readFileSync(await manifest.path(), 'utf8')
+    .trim()
+    .split('\r\n');
   expect(manifestRows.at(-1)).toBe('astral,TOTAL,,,94');
   await page.goto('/verify/astral');
   await expect(page.getByText('Fingerprints match')).toBeVisible();
@@ -280,9 +282,14 @@ test('committed pool: 50 concurrent purchases across two processes for the last 
   // 45 purchases go through the web server process while this test process buys 5 directly
   // on its own database connection at the same moment.
   const http = Promise.all(
-    ids.slice(0, 45).map((accessId) =>
-      page.request.post('/api/loopbox', { headers: origin, data: { action: 'preorder', accessId } }),
-    ),
+    ids
+      .slice(0, 45)
+      .map((accessId) =>
+        page.request.post('/api/loopbox', {
+          headers: origin,
+          data: { action: 'preorder', accessId },
+        }),
+      ),
   );
   const direct = new Loopbox(db, () => Date.now(), true);
   const directWins = ids.slice(45).filter((accessId) => {
@@ -362,5 +369,124 @@ test('partner portal: apply, approve, draft, submit, publish, appear on home', a
   await expect(page.getByRole('heading', { name: 'Pasar Pals™' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Fishball Fin' })).toBeVisible();
   await page.screenshot({ path: resolve(screenshotDir, '09-partner-drop.png'), fullPage: true });
+  expect(errors).toEqual([]);
+});
+
+test('marketplace: Alex buys 2 boxes from Mei, Mei fulfils, Alex confirms, fee recorded', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await login(page, 'collector');
+  await page.goto('/market');
+  await expect(
+    page.getByRole('heading', { name: 'Blind boxes, made by collectors.' }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: /Tropical Treats/ }).click();
+  await expect(page.getByRole('heading', { name: 'Tropical Treats' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'What’s inside: stock and odds' })).toBeVisible();
+  await page.screenshot({ path: resolve(screenshotDir, '10-listing.png'), fullPage: true });
+  await page.locator('input[name="quantity"]').fill('2');
+  await expect(page.getByText('Total S$24.00')).toBeVisible();
+  await page.getByRole('checkbox', { name: 'I am 18 or older' }).check();
+  await page.getByRole('button', { name: 'Buy boxes' }).click();
+  // Simulated payment, then the two boxes open one after the other.
+  await expect(page.getByText('Box 1 of 2')).toBeVisible();
+  await page.getByRole('button', { name: 'Skip' }).click();
+  await expect(page.getByRole('heading', { name: 'Your boxes', exact: true })).toBeVisible();
+  const orderUrl = page.url().split('?')[0];
+  expect(orderUrl).toMatch(/\/orders\/mko-/);
+  await expect(page.locator('.drawn')).toHaveCount(2);
+  // Mei sees what to hand over and marks it fulfilled.
+  await login(page, 'mei');
+  await page.goto(orderUrl);
+  await expect(page.getByRole('heading', { name: 'Pick list' })).toBeVisible();
+  await expect(page.getByText(/^Hand over: /)).toBeVisible();
+  await page.screenshot({ path: resolve(screenshotDir, '11-pick-list.png'), fullPage: true });
+  await page.getByLabel('Note for the buyer (optional)').fill('Handed over at Toa Payoh exit B');
+  await page.getByRole('button', { name: 'Mark as fulfilled' }).click();
+  await expect(page.getByText('Handed over', { exact: true })).toBeVisible();
+  // Alex confirms receipt.
+  await login(page, 'collector');
+  await page.goto(orderUrl);
+  await expect(page.getByText('Seller’s note: Handed over at Toa Payoh exit B')).toBeVisible();
+  await page.getByRole('button', { name: 'Confirm received as drawn' }).click();
+  await expect(page.getByText('Receipt confirmed.', { exact: false })).toBeVisible();
+  // Chat is text only and carries the off-platform payment warning.
+  await page.getByRole('link', { name: 'Open chat' }).click();
+  await expect(
+    page.getByText('Pay only through LoopBox. Payments outside the app are not protected.'),
+  ).toBeVisible();
+  await page.getByPlaceholder('Write a message').fill('<script>alert(1)</script> thanks!');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.getByText('<script>alert(1)</script> thanks!')).toBeVisible();
+  // Mei's dashboard: S$24.00 order → S$1.92 platform fee, S$22.08 owed; the seeded order is still held.
+  await login(page, 'mei');
+  await page.goto('/sell');
+  await expect(page.getByRole('heading', { name: 'Seller dashboard' })).toBeVisible();
+  const stat = (label: string) => page.locator('.stat').filter({ hasText: label }).locator('dd');
+  await expect(stat('Seller owed')).toHaveText('S$22.08');
+  await expect(stat('Platform fee')).toHaveText('S$3.84');
+  await expect(stat('Held until receipt')).toHaveText('S$22.08');
+  await page.screenshot({ path: resolve(screenshotDir, '12-seller.png'), fullPage: true });
+  expect(errors).toEqual([]);
+});
+
+test('marketplace: verify with demo codes, list a series with a photo, publish, others see it', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await login(page, 'demo-0');
+  await page.goto('/sell/new');
+  await expect(page.getByRole('heading', { name: 'Verify to start selling' })).toBeVisible();
+  await page.getByRole('link', { name: 'Verify email and phone' }).click();
+  await expect(page.getByText('Demo verification — real SMS is future work')).toBeVisible();
+  for (const [field, value, channel] of [
+    ['verifyEmail', 'sarah@example.com', 'email'],
+    ['verifyPhone', '+65 9123 4567', 'phone'],
+  ]) {
+    await page.locator(`input[name="${field}"]`).fill(value);
+    await page.getByRole('button', { name: `Send ${channel} code` }).click();
+    const code = (await page.locator('.demo-code b').innerText()).trim();
+    expect(code).toMatch(/^\d{6}$/);
+    await page.locator(`input[name="${channel}Code"]`).fill(code);
+    await page.getByRole('button', { name: `Verify ${channel}` }).click();
+    await expect(page.locator('.demo-code')).toHaveCount(0);
+  }
+  await expect(page.getByText('You’re verified.')).toBeVisible();
+  await page.goto('/sell/new');
+  await page.getByLabel('Title').fill('Hawker Heroes Mini');
+  await page.getByLabel('Theme').fill('Food');
+  await page.locator('input[name="listingPrice"]').fill('9');
+  for (const [i, name] of ['Satay Sam', 'Laksa Lin', 'Chendol Chief'].entries())
+    await page.locator(`input[name="kinName${i}"]`).fill(name);
+  // A text file renamed .png is refused by its bytes; a real PNG is accepted.
+  await page.locator('input[name="photos"]').setInputFiles({
+    name: 'fake.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('<html><script>alert(1)</script></html>'),
+  });
+  await expect(page.getByText('Photos must be PNG, JPEG or WebP images.')).toBeVisible();
+  await page.locator('input[name="photos"]').setInputFiles({
+    name: 'box.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+      'base64',
+    ),
+  });
+  await expect(page.getByRole('img', { name: 'Listing photo 1' })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish listing' }).click();
+  await expect(page.getByRole('heading', { name: 'Hawker Heroes Mini' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'This is your listing' })).toBeVisible();
+  // Jun (another seller) finds it in the marketplace but cannot edit it.
+  await login(page, 'jun');
+  await page.goto('/market');
+  await page.getByLabel('Search titles').fill('hawker');
+  await page.getByRole('button', { name: 'Search' }).click();
+  await expect(page.getByRole('link', { name: /Hawker Heroes Mini/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Photo of Hawker Heroes Mini' })).toBeVisible();
+  await noOverflow(page);
   expect(errors).toEqual([]);
 });

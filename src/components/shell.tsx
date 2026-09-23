@@ -46,7 +46,10 @@ function Frame({ children }: { children: React.ReactNode }) {
     admin = role === 'ADMIN',
     // Real accounts (and everyone when demo mode is off) get a plain account chip.
     realUser = !!data?.user && !data.identities.some((i) => i.id === data.user?.id),
-    plain = !!data && (!data.demo || realUser);
+    plain = !!data && (!data.demo || realUser),
+    // Other seeded collectors (Sarah, Mei, Jun, Priya) are named, so a seller never looks like Alex.
+    other =
+      data?.user && role === 'COLLECTOR' && data.user.id !== 'collector' ? data.user.name : '';
   return (
     <>
       <a className="skip-link" href="#content">
@@ -87,9 +90,15 @@ function Frame({ children }: { children: React.ReactNode }) {
                   router.push(toStudio ? '/studio' : '/drop');
                 }}
               >
-                <b aria-hidden="true">{admin ? 'AD' : business ? 'AS' : 'A'}</b>
+                <b aria-hidden="true">{admin ? 'AD' : business ? 'AS' : other ? other[0] : 'A'}</b>
                 <span className="who-label">
-                  {admin ? 'Demo admin' : business ? 'Demo studio' : 'Demo collector'}
+                  {admin
+                    ? 'Demo admin'
+                    : business
+                      ? 'Demo studio'
+                      : other
+                        ? 'Demo ' + other
+                        : 'Demo collector'}
                 </span>
                 <span className="visually-hidden">, switch workspace</span>
               </button>
