@@ -19,7 +19,7 @@ import type {
   Allocation,
   Campaign,
   User,
-  Snapshot,
+  CoreSnapshot,
   Match,
   Access,
   Analytics,
@@ -38,6 +38,15 @@ const SESSION_TTL_MS = 86400000,
   LOCKOUT_MS = 15 * 60000;
 /** Order statuses that hold a seat against capacity. */
 const ACTIVE = "('PENDING_PAYMENT','PAID','DEMO_PAID')";
+/** Order-item states that keep their drawn pool unit out of the draw. */
+export const HELD_STATES = "('opened','confirmed','in_production','shipped')";
+/** Opened (not yet paid) items of a campaign that hold a unit without an active order. */
+export const heldItemsSql = (campaignExpr: string) =>
+  `(SELECT COUNT(*) FROM order_items i WHERE i.campaign_id=${campaignExpr} AND i.state='opened' AND NOT EXISTS (SELECT 1 FROM item_orders io JOIN orders o ON o.id=io.order_id WHERE io.item_id=i.id AND o.status IN ${ACTIVE}))`;
+/** Opened items whose reservation ran out (or whose preorder closed) with no card payment open. */
+const EXPIRED_ITEM = `i.state='opened' AND (i.reserved_until<=? OR i.campaign_id IN (SELECT id FROM campaigns WHERE phase<>'ACTIVE_PREORDER')) AND NOT EXISTS (SELECT 1 FROM item_orders io JOIN orders o ON o.id=io.order_id WHERE io.item_id=i.id AND o.status='PENDING_PAYMENT')`;
+/** The lowest-position pool unit that is neither sold nor held by an opened item. */
+const NEXT_FREE_UNIT = `SELECT id,character_id,position FROM pool_units p WHERE campaign_id=? AND allocated=0 AND NOT EXISTS (SELECT 1 FROM order_items h WHERE h.pool_unit_id=p.id AND h.state IN ${HELD_STATES}) ORDER BY position LIMIT 1`;
 export type PaymentSession = {
   id: string;
   payment_status?: string | null;
@@ -88,7 +97,7 @@ export class Loopbox {
   }
   campaign(campaignId = 'astral') {
     const c = this.one<Campaign>(
-      `SELECT c.*, (SELECT COUNT(*) FROM orders WHERE campaign_id=c.id AND status IN ${ACTIVE}) AS confirmed FROM campaigns c WHERE id=?`,
+      `SELECT c.*, (SELECT COUNT(*) FROM orders WHERE campaign_id=c.id AND status IN ${ACTIVE}) + ${heldItemsSql('c.id')} AS confirmed FROM campaigns c WHERE id=?`,
       campaignId,
     );
     if (!c) throw new DomainError('NOT_FOUND', 404);
@@ -125,9 +134,16 @@ export class Loopbox {
   collector(id: string) {
     if (this.user(id).role !== 'COLLECTOR') throw new DomainError('COLLECTOR_ONLY', 403);
   }
+  /**
+   * Slots used against the per-person max: boxes ordered, plus every opened item without an
+   * active order — including declined and expired ones, so declining never frees a slot.
+   */
   purchases(id: string, campaignId = 'astral') {
     return this.one<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM orders WHERE user_id=? AND campaign_id=? AND status IN ${ACTIVE}`,
+      `SELECT (SELECT COUNT(*) FROM orders WHERE user_id=? AND campaign_id=? AND status IN ${ACTIVE})
+        + (SELECT COUNT(*) FROM order_items i WHERE i.user_id=? AND i.campaign_id=? AND NOT EXISTS (SELECT 1 FROM item_orders io JOIN orders o ON o.id=io.order_id WHERE io.item_id=i.id AND o.status IN ${ACTIVE})) AS n`,
+      id,
+      campaignId,
       id,
       campaignId,
     )!.n;
@@ -256,6 +272,11 @@ export class Loopbox {
     );
     if (existing) return existing.id;
     const accessId = randomUUID();
+    const hold =
+      this.one<{ m: number }>(
+        'SELECT slot_hold_minutes AS m FROM themes WHERE campaign_id=?',
+        campaignId,
+      )?.m ?? 15;
     this.run(
       'INSERT INTO access (id,user_id,campaign_id,game_id,earned_at,expires_at,status) VALUES (?,?,?,?,?,?,?)',
       accessId,
@@ -263,7 +284,7 @@ export class Loopbox {
       campaignId,
       gameId,
       this.now(),
-      this.now() + 15 * 60000,
+      this.now() + hold * 60000,
       'AVAILABLE',
     );
     return accessId;
@@ -477,7 +498,18 @@ export class Loopbox {
         return { cancelled: false };
       }
     }
-    return { cancelled: this.transaction(() => this.release(pending.id, 'cancelled')) };
+    return {
+      cancelled: this.transaction(() => {
+        // A v2 basket pays several figures in one session: give all of them back.
+        const siblings = this.all<{ order_id: string }>(
+          'SELECT b.order_id FROM item_orders a JOIN item_orders b ON b.basket_id=a.basket_id WHERE a.order_id=? AND b.order_id<>?',
+          pending.id,
+          pending.id,
+        );
+        for (const o of siblings) this.release(o.order_id, 'cancelled');
+        return this.release(pending.id, 'cancelled');
+      }),
+    };
   }
   /** Marks a pending (or revivable) B2C order paid and allocates its box, in the caller's txn. */
   private settleB2C(orderId: string, session: PaymentSession, simulated: boolean) {
@@ -519,15 +551,18 @@ export class Loopbox {
       const allocationId = this.allocate(orderId, o.user_id, o.campaign_id);
       this.run('RELEASE allocate_unit');
       this.run(
-        "UPDATE payments SET status=?,payment_intent=?,stripe_session_id=COALESCE(stripe_session_id,?),paid_at=?,updated_at=? WHERE kind='B2C' AND ref_id=?",
+        // In a multi-figure basket only the first order's payment row carries the session id.
+        "UPDATE payments SET status=?,payment_intent=?,stripe_session_id=COALESCE(stripe_session_id,CASE WHEN EXISTS (SELECT 1 FROM payments WHERE stripe_session_id=?) THEN NULL ELSE ? END),paid_at=?,updated_at=? WHERE kind='B2C' AND ref_id=?",
         simulated ? 'SIMULATED' : 'PAID',
         session.payment_intent ?? null,
+        session.id,
         session.id,
         this.now(),
         this.now(),
         orderId,
       );
       this.run("UPDATE access SET status='REDEEMED',order_id=? WHERE id=?", orderId, o.access_id);
+      this.run('UPDATE order_items SET payment_ref=? WHERE order_id=?', session.id, orderId);
       this.audit(o.user_id, 'order.paid', 'order', orderId, { simulated });
       this.audit(o.user_id, 'allocation.created', 'allocation', allocationId, { order: orderId });
       return { outcome: 'paid' as const, allocationId };
@@ -540,7 +575,11 @@ export class Loopbox {
   }
   /** Idempotent: a Stripe event id is processed at most once (webhook_events primary key). */
   processPaymentEvent(event: PaymentEvent, simulated = false) {
-    return this.transaction(() => {
+    return this.transaction(() => this.applyPaymentEvent(event, simulated));
+  }
+  /** The body of processPaymentEvent, for callers that already hold the transaction. */
+  protected applyPaymentEvent(event: PaymentEvent, simulated = false) {
+    {
       const inserted = this.run(
         'INSERT OR IGNORE INTO webhook_events (id,type,received_at) VALUES (?,?,?)',
         event.id,
@@ -550,29 +589,59 @@ export class Loopbox {
       if (Number(inserted.changes) === 0) return { outcome: 'duplicate' as const };
       const meta = event.session.metadata ?? {};
       const orderId = meta.order_id || event.session.client_reference_id || '';
-      let result: { outcome: string; allocationId?: string; paymentIntent?: string | null } = {
+      // A v2 checkout pays several figures in one session: one order per figure.
+      const orderIds = (meta.order_ids ? meta.order_ids.split(',') : [orderId])
+        .filter(Boolean)
+        .slice(0, 20);
+      let result: {
+        outcome: string;
+        allocationId?: string;
+        paymentIntent?: string | null;
+        refundCents?: number;
+      } = {
         outcome: 'ignored',
       };
       if (meta.kind === 'C2C') result = this.settleMarket(event, orderId, simulated);
       else if (event.type === 'checkout.session.completed') {
-        if (event.session.payment_status === 'paid')
-          result = this.settleB2C(orderId, event.session, simulated);
+        if (event.session.payment_status === 'paid') {
+          const settled = orderIds.map((id) => ({
+            id,
+            r: this.settleB2C(id, event.session, simulated),
+          }));
+          const refunded = settled.filter((x) => x.r.outcome === 'refund');
+          const paid = settled.find((x) => x.r.outcome === 'paid');
+          if (refunded.length) {
+            const amounts = refunded.map(
+              (x) =>
+                this.one<{ amount: number }>('SELECT amount FROM orders WHERE id=?', x.id)
+                  ?.amount ?? 0,
+            );
+            result = {
+              outcome: 'refund',
+              paymentIntent: event.session.payment_intent ?? null,
+              // Partial refund only when some figures in the same payment were confirmed.
+              refundCents: paid ? amounts.reduce((n, a) => n + a, 0) : undefined,
+            };
+          } else if (paid) result = paid.r;
+        }
       } else if (event.type === 'checkout.session.expired') {
-        result = { outcome: this.release(orderId, 'session_expired') ? 'expired' : 'ignored' };
+        const released = orderIds.map((id) => this.release(id, 'session_expired'));
+        result = { outcome: released.some(Boolean) ? 'expired' : 'ignored' };
       }
       this.run('UPDATE webhook_events SET processed_at=? WHERE id=?', this.now(), event.id);
       return result;
-    });
+    }
   }
   /** Processes an event, then (after commit) refunds a payment that could not get a box. */
   async handlePaymentEvent(
     event: PaymentEvent,
-    refund: (paymentIntent: string) => Promise<void> = refundPaymentIntent,
+    refund: (paymentIntent: string, amountCents?: number) => Promise<void> = refundPaymentIntent,
   ) {
     const result = this.processPaymentEvent(event);
     if (result.outcome === 'refund' && 'paymentIntent' in result && result.paymentIntent) {
       try {
-        await refund(result.paymentIntent);
+        const partial = 'refundCents' in result ? result.refundCents : undefined;
+        await (partial ? refund(result.paymentIntent, partial) : refund(result.paymentIntent));
         this.audit(null, 'refund.sent', 'order', event.session.client_reference_id ?? '', {});
       } catch {
         this.audit(null, 'refund.failed', 'order', event.session.client_reference_id ?? '', {});
@@ -597,6 +666,13 @@ export class Loopbox {
     );
     if (!payment || payment.user_id !== id) throw new DomainError('NOT_FOUND', 404);
     if (payment.status !== 'OPEN') throw new DomainError('ALREADY_DONE');
+    const basket =
+      kind === 'B2C'
+        ? this.all<{ order_id: string }>(
+            "SELECT b.order_id FROM item_orders a JOIN item_orders b ON b.basket_id=a.basket_id JOIN orders o ON o.id=b.order_id WHERE a.order_id=? AND o.status='PENDING_PAYMENT' ORDER BY b.created_at,b.order_id",
+            orderId,
+          ).map((r) => r.order_id)
+        : [];
     return this.processPaymentEvent(
       {
         id: 'sim_' + randomUUID(),
@@ -606,7 +682,10 @@ export class Loopbox {
           payment_status: 'paid',
           payment_intent: null,
           client_reference_id: orderId,
-          metadata: { kind, order_id: orderId },
+          metadata:
+            basket.length > 1
+              ? { kind, order_id: orderId, order_ids: basket.join(',') }
+              : { kind, order_id: orderId },
         },
       },
       true,
@@ -637,14 +716,36 @@ export class Loopbox {
       "SELECT 1 FROM access WHERE status='AVAILABLE' AND expires_at<=? LIMIT 1",
       now,
     );
-    if (!orders.length && !slots) return;
+    const items = this.one(`SELECT 1 FROM order_items i WHERE ${EXPIRED_ITEM} LIMIT 1`, now);
+    if (!orders.length && !slots && !items) return;
     this.transaction(() => {
       for (const o of orders) this.release(o.id, 'session_expired');
       this.run(
         "UPDATE access SET status='EXPIRED' WHERE status='AVAILABLE' AND expires_at<=?",
         now,
       );
+      this.expireItems(now);
     });
+  }
+  /**
+   * Opened items past their reservation (or whose preorder closed) go back to the pool: the
+   * state flips once, from opened to expired, so stock returns exactly once. Items with a card
+   * payment in progress wait for Stripe's answer. Caller holds the transaction.
+   */
+  protected expireItems(now: number) {
+    const due = this.all<{ id: string; user_id: string }>(
+      `SELECT id,user_id FROM order_items i WHERE ${EXPIRED_ITEM}`,
+      now,
+    );
+    for (const item of due) {
+      this.run(
+        "UPDATE order_items SET state='expired',closed_at=? WHERE id=? AND state='opened'",
+        now,
+        item.id,
+      );
+      this.audit(item.user_id, 'item.expired', 'order_item', item.id, {});
+    }
+    return due.length;
   }
   /**
    * Gives an order the lowest unsold position in the committed shuffle. Must run inside the
@@ -652,10 +753,20 @@ export class Loopbox {
    * take the same unit (also enforced by the unique pool_unit_id index).
    */
   allocate(orderId: string, userId: string, campaignId: string) {
-    const unit = this.one<{ id: string; character_id: string }>(
-      'SELECT id,character_id FROM pool_units WHERE campaign_id=? AND allocated=0 ORDER BY position LIMIT 1',
-      campaignId,
+    // A v2 order pays for a figure that was already drawn and shown: it gets exactly that unit.
+    const item = this.one<{ id: string; pool_unit_id: string; state: string }>(
+      'SELECT i.id,i.pool_unit_id,i.state FROM item_orders io JOIN order_items i ON i.id=io.item_id WHERE io.order_id=?',
+      orderId,
     );
+    let unit: { id: string; character_id: string } | undefined;
+    if (item) {
+      if (item.state !== 'opened' && item.state !== 'expired') throw new DomainError('SOLD_OUT');
+      unit = this.one<{ id: string; character_id: string }>(
+        `SELECT id,character_id FROM pool_units p WHERE id=? AND allocated=0 AND NOT EXISTS (SELECT 1 FROM order_items h WHERE h.pool_unit_id=p.id AND h.id<>? AND h.state IN ${HELD_STATES})`,
+        item.pool_unit_id,
+        item.id,
+      );
+    } else unit = this.one<{ id: string; character_id: string }>(NEXT_FREE_UNIT, campaignId);
     if (!unit) throw new DomainError('SOLD_OUT');
     this.run('UPDATE pool_units SET allocated=1 WHERE id=? AND allocated=0', unit.id);
     const allocationId = randomUUID();
@@ -668,10 +779,18 @@ export class Loopbox {
       userId,
       unit.character_id,
       'OWNED',
-      0,
+      item ? 1 : 0,
       this.now(),
       unit.id,
     );
+    if (item)
+      this.run(
+        "UPDATE order_items SET state='confirmed',confirmed_at=?,order_id=?,allocation_id=?,closed_at=NULL WHERE id=?",
+        this.now(),
+        orderId,
+        allocationId,
+        item.id,
+      );
     return allocationId;
   }
   /** Public fairness record. The seed and full order are only returned after preorders close. */
@@ -902,6 +1021,13 @@ export class Loopbox {
         );
         this.run("UPDATE allocations SET status='LOCKED_FOR_PRODUCTION' WHERE campaign_id=?", c.id);
       }
+      if (next === 'IN_PRODUCTION' || next === 'SHIPPING')
+        this.run(
+          'UPDATE order_items SET state=? WHERE campaign_id=? AND state=?',
+          next === 'IN_PRODUCTION' ? 'in_production' : 'shipped',
+          c.id,
+          next === 'IN_PRODUCTION' ? 'confirmed' : 'in_production',
+        );
       this.run('UPDATE campaigns SET phase=? WHERE id=?', next, c.id);
       return { phase: next };
     });
@@ -1092,7 +1218,7 @@ export class Loopbox {
   publicCampaigns() {
     return this.all<CampaignCard>(
       `SELECT c.id,c.name,c.phase,c.price,c.capacity,c.starts_at,c.ends_at,c.trade_ends_at,p.name AS partner,p.type AS partner_type,
-        (SELECT COUNT(*) FROM orders WHERE campaign_id=c.id AND status IN ${ACTIVE}) AS confirmed
+        (SELECT COUNT(*) FROM orders WHERE campaign_id=c.id AND status IN ${ACTIVE}) + ${heldItemsSql('c.id')} AS confirmed
        FROM campaigns c LEFT JOIN partners p ON p.id=c.partner_id
        WHERE c.phase NOT IN ('DRAFT','IN_REVIEW','CANCELLED') ORDER BY c.created_at,c.id`,
     );
@@ -1106,7 +1232,7 @@ export class Loopbox {
     }
     return c;
   }
-  snapshot(user: User | null, campaignId = 'astral'): Snapshot {
+  snapshot(user: User | null, campaignId = 'astral'): CoreSnapshot {
     this.sweepExpired();
     const c = this.visibleCampaign(user, campaignId);
     const id = user?.id ?? '';
@@ -1115,9 +1241,11 @@ export class Loopbox {
       campaign: c,
       campaigns: this.publicCampaigns(),
       characters: this.all<CharacterInfo>(
-        'SELECT id,campaign_id,name,rarity,units,color,description FROM characters WHERE campaign_id=? OR campaign_id IN (SELECT campaign_id FROM allocations WHERE owner_id=?) ORDER BY rowid',
+        `SELECT c.id,c.campaign_id,c.name,c.rarity,c.units,c.color,c.description,c.slug,
+          (SELECT COUNT(*) FROM pool_units p WHERE p.character_id=c.id AND (p.allocated=1 OR EXISTS (SELECT 1 FROM order_items h WHERE h.pool_unit_id=p.id AND h.state IN ${HELD_STATES}))) AS pulled
+         FROM characters c WHERE c.campaign_id=? OR c.campaign_id IN (${this.ownedCampaignsSql()}) ORDER BY c.rowid`,
         c.id,
-        id,
+        ...this.ownedCampaignsArgs(id),
       ),
       weights: this.all<{ weight: number }>(
         'SELECT weight FROM characters WHERE campaign_id=? ORDER BY rowid',
@@ -1156,6 +1284,13 @@ export class Loopbox {
       attemptLimit: this.attemptLimit(c),
       attemptsLeft: Math.max(0, this.attemptLimit(c) - this.attemptsUsed(id, c.id)),
     };
+  }
+  /** Campaigns whose characters the user needs to see (their boxes, items and figures). */
+  protected ownedCampaignsSql() {
+    return 'SELECT campaign_id FROM allocations WHERE owner_id=?';
+  }
+  protected ownedCampaignsArgs(id: string): SQLInputValue[] {
+    return [id];
   }
   waitlist(id: string, campaignId = 'astral') {
     this.collector(id);

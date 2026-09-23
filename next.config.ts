@@ -46,7 +46,8 @@ const config: NextConfig = {
           {
             key: 'Permissions-Policy',
             value:
-              'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
+              // Camera on this origin only: the QR scanner in My collection → Add more.
+              'camera=(self), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
           },
           ...(httpsOnly
             ? [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' }]

@@ -56,6 +56,36 @@ export interface CharacterInfo {
   units: number;
   color: string | null;
   description: string | null;
+  /** Image key inside the theme (image manifest), when the character has one. */
+  slug?: string | null;
+  /** Boxes of this character already drawn (opened or paid) in its drop. */
+  pulled?: number;
+}
+/** One card on /drops: a seeded theme, or a published partner campaign without a theme row. */
+export interface ThemeInfo {
+  slug: string;
+  name: string;
+  status: 'live' | 'coming_soon';
+  payment_mode: 'stripe' | 'demo' | null;
+  licensed: boolean;
+  sort_order: number;
+  tagline: string;
+  description: string;
+  accent: string;
+  accent_secondary: string | null;
+  cover: string | null;
+  campaign_id: string | null;
+  phase: string | null;
+  price: number | null;
+  capacity: number | null;
+  claimed: number;
+  max_per_user: number | null;
+  closes_at: number | null;
+  starts_at: number | null;
+  slot_hold_minutes: number;
+  reservation_minutes: number;
+  mix: { COMMON: number; RARE: number; SECRET: number };
+  partner: string | null;
 }
 export interface CampaignCard {
   id: string;
@@ -70,7 +100,38 @@ export interface CampaignCard {
   partner: string | null;
   partner_type: 'BRAND' | 'COLLECTIVE' | null;
 }
-export interface Snapshot {
+export type Snapshot = CoreSnapshot & {
+  themes: ThemeInfo[];
+  /** Theme slugs the user asked to be notified about. */
+  interest: string[];
+  /** The user's opened blind boxes and what happened to them (all drops). */
+  items: OrderItem[];
+  /** Physical figures this user added by QR code. */
+  physical: PhysicalFigure[];
+  /** Won slots not opened yet, in every drop. */
+  slots: { id: string; campaign_id: string; expires_at: number }[];
+};
+/** One opened slot: slot_won (an unused access) → opened → confirmed → in_production → shipped. */
+export interface OrderItem {
+  id: string;
+  access_id: string;
+  campaign_id: string;
+  theme_slug: string | null;
+  character_id: string;
+  state: 'opened' | 'confirmed' | 'in_production' | 'shipped' | 'declined' | 'expired';
+  opened_at: number;
+  reserved_until: number;
+  confirmed_at: number | null;
+  payment_mode: 'stripe' | 'demo' | null;
+  /** A card payment for this item is open on Stripe right now. */
+  pending: boolean;
+  basket_id: string | null;
+  allocation_id: string | null;
+  order_id: string | null;
+  position: number;
+  price: number;
+}
+export interface CoreSnapshot {
   serverTime: number;
   campaign: Campaign;
   campaigns: CampaignCard[];
@@ -144,5 +205,18 @@ export interface Verification {
   sold: number;
   seed?: string;
   order?: string[];
-  serverCheck?: { recomputedCommitment: string; orderMatches: boolean; fingerprintMatches: boolean };
+  serverCheck?: {
+    recomputedCommitment: string;
+    orderMatches: boolean;
+    fingerprintMatches: boolean;
+  };
+}
+export interface PhysicalFigure {
+  id: string;
+  character_id: string;
+  campaign_id: string;
+  theme_slug: string;
+  serial_no: number;
+  cap: number;
+  claimed_at: number;
 }

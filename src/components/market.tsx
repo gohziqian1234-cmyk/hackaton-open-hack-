@@ -2,11 +2,20 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Search, ShieldCheck, Store } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  BadgeCheck,
+  ListChecks,
+  MessageCircleWarning,
+  Search,
+  ShieldCheck,
+  Truck,
+} from 'lucide-react';
 import { api, useLoop } from './provider';
 import { Loading } from './shell';
 import { useJson } from './use-json';
-import { KinArt } from './art';
+import { CharacterTile } from './character-image';
 import { sgd } from '../lib/catalog';
 import { Button, Card, Empty, ErrorNote, Tier } from './ui';
 
@@ -19,8 +28,14 @@ export type MarketCard = {
   seller: string;
   trust: number;
   left: number;
+  declared: number;
+  characters: number;
+  rares: number;
+  fulfilment: 'SHIP' | 'MEETUP' | 'BOTH';
+  verified: number;
   photo: string | null;
   colors: string | null;
+  names: string | null;
 };
 export type ListingView = {
   listing: {
@@ -33,6 +48,7 @@ export type ListingView = {
     status: string;
     seller: string;
     trust: number;
+    verified: number;
     isMine: boolean;
   };
   characters: {
@@ -50,15 +66,27 @@ export const fulfilmentLabel = {
   MEETUP: 'Meet-up hand-over',
   BOTH: 'Post or meet-up',
 };
+/** Demo policy (assumption, founder to confirm): sellers hand over within this many days of payment. */
+export const HANDOVER_DAYS = 3;
+export const shipLine = (f: 'SHIP' | 'MEETUP' | 'BOTH') =>
+  (f === 'MEETUP'
+    ? 'Meet-up within '
+    : f === 'BOTH'
+      ? 'Ships or meet-up within '
+      : 'Ships within ') +
+  HANDOVER_DAYS +
+  ' days';
 
-/** Seller photo from the upload route, or the listing's character colours when there is none. */
+/** Seller photo from the upload route, or neutral character tiles when there is none. */
 export function ListingArt({
   photo,
   colors,
+  names,
   title,
 }: {
   photo: string | null;
   colors: string | null;
+  names?: string | null;
   title: string;
 }) {
   // Served by /api/uploads with nosniff and the type recorded at upload; next/image would re-host it.
@@ -72,11 +100,12 @@ export function ListingArt({
         loading="lazy"
       />
     );
-  const palette = (colors ?? '').split(',').filter(Boolean).slice(0, 3);
+  const palette = (colors ?? '').split(',').filter(Boolean).slice(0, 4);
+  const labels = (names ?? '').split('|');
   return (
-    <div className="listing-photo listing-kin" aria-hidden="true">
+    <div className="listing-photo listing-tiles" aria-hidden="true">
       {palette.map((c, i) => (
-        <KinArt key={i} id="custom" name="" color={c} />
+        <CharacterTile key={i} name={labels[i] || title} color={c} origin={title} />
       ))}
     </div>
   );
@@ -88,44 +117,140 @@ export function TrustChip({ seller, trust }: { seller: string; trust: number }) 
     </span>
   );
 }
+/** Seller identity row: initial, name, trust score, verified mark. */
+export function SellerRow({
+  seller,
+  trust,
+  verified,
+}: {
+  seller: string;
+  trust: number;
+  verified: boolean;
+}) {
+  return (
+    <span className="seller-row">
+      <b className="seller-avatar" aria-hidden="true">
+        {seller.slice(0, 1).toUpperCase()}
+      </b>
+      <span className="seller-name">{seller}</span>
+      <span className={'trust-badge' + (trust < 50 ? ' low' : '')}>Trust {trust}</span>
+      {verified && (
+        <span className="verified">
+          <BadgeCheck size={16} aria-hidden="true" /> Verified
+        </span>
+      )}
+    </span>
+  );
+}
+
+const SORTS = [
+  { id: 'new', label: 'Newest' },
+  { id: 'price_asc', label: 'Price: low to high' },
+  { id: 'price_desc', label: 'Price: high to low' },
+  { id: 'stock', label: 'Most stock left' },
+  { id: 'trust', label: 'Top-rated sellers' },
+] as const;
+type Filters = { q: string; theme: string; min: string; max: string; rarity: string; sort: string };
+const EMPTY: Filters = { q: '', theme: '', min: '', max: '', rarity: '', sort: '' };
+
+function ListingCard({ l }: { l: MarketCard }) {
+  const soldOut = l.status === 'SOLD_OUT' || l.left === 0;
+  const pct = l.declared ? Math.round((l.left / l.declared) * 100) : 0;
+  return (
+    <li>
+      <Link href={'/market/' + l.id} className="listing-card-v2">
+        <div className="lc-media">
+          <ListingArt photo={l.photo} colors={l.colors} names={l.names} title={l.title} />
+          <span className="lc-theme">{l.theme}</span>
+        </div>
+        <div className="lc-body">
+          <h2 className="lc-title">{l.title}</h2>
+          <p className="lc-price tabular">
+            {sgd(l.price_cents)} <small>a box</small>
+          </p>
+          <div className="lc-stock">
+            <span className="lc-bar" aria-hidden="true">
+              <i style={{ width: pct + '%' }} />
+            </span>
+            <span className="tabular">
+              {soldOut ? 'Sold out' : `${l.left} of ${l.declared} left`}
+            </span>
+          </div>
+          <p className="lc-odds">
+            {l.characters} characters · {l.rares} {l.rares === 1 ? 'rare' : 'rares'}
+            <span aria-hidden="true"> · </span>
+            <span className="visually-hidden">. </span>
+            {shipLine(l.fulfilment)}
+          </p>
+          <SellerRow seller={l.seller} trust={l.trust} verified={!!l.verified} />
+        </div>
+      </Link>
+    </li>
+  );
+}
 
 export function MarketBrowse() {
-  const [q, setQ] = useState(''),
-    [filters, setFilters] = useState({ q: '', theme: '', min: '', max: '', rarity: '' });
+  const router = useRouter(),
+    search = useSearchParams();
+  const initial: Filters = {
+    q: search.get('q') ?? '',
+    theme: search.get('theme') ?? '',
+    min: search.get('min') ?? '',
+    max: search.get('max') ?? '',
+    rarity: search.get('rarity') ?? '',
+    sort: search.get('sort') ?? '',
+  };
+  const [q, setQ] = useState(initial.q),
+    [filters, setFiltersState] = useState<Filters>(initial);
+  const setFilters = (next: Filters) => {
+    setFiltersState(next);
+    // Keep the URL shareable: every filter lives in the query string.
+    const url = new URLSearchParams();
+    for (const [k, v] of Object.entries(next)) if (v) url.set(k, v);
+    router.replace('/market' + (url.size ? '?' + url.toString() : ''), { scroll: false });
+  };
   const params = new URLSearchParams();
   if (filters.q) params.set('q', filters.q);
   if (filters.theme) params.set('theme', filters.theme);
   if (filters.min) params.set('min', String(Math.round(Number(filters.min) * 100)));
   if (filters.max) params.set('max', String(Math.round(Number(filters.max) * 100)));
   if (filters.rarity) params.set('rarity', filters.rarity);
+  if (filters.sort) params.set('sort', filters.sort);
   const { data, failed, reload } = useJson<{ listings: MarketCard[]; themes: string[] }>(
     '/api/market?' + params.toString(),
   );
-  const filtered = Object.values(filters).some(Boolean);
+  const filtered = Object.entries(filters).some(([k, v]) => k !== 'sort' && !!v);
   return (
-    <section className="wrap market">
-      <div className="page-heading">
+    <section className="wrap market market-v2">
+      <div className="mk-head">
         <div>
-          <span className="live">Creator marketplace</span>
-          <h1>Blind boxes, made by collectors.</h1>
-          <p className="lead">
-            Every listing shows its full stock before you buy. We draw each box from what’s left,
-            and hold your payment until you confirm you got it.
-          </p>
+          <h1>Marketplace</h1>
+          <p className="lead">Independent blind-box series from verified sellers.</p>
         </div>
-        <Button href="/sell" variant="ghost">
-          <Store size={18} aria-hidden="true" /> Sell your series
-        </Button>
+        <Link className="text-link" href="/sell">
+          Sell on LoopBox <ArrowRight size={18} aria-hidden="true" />
+        </Link>
       </div>
+      <ul className="trust-strip" aria-label="Buyer protection">
+        <li>
+          <ShieldCheck size={22} aria-hidden="true" /> Payment held until you confirm delivery
+        </li>
+        <li>
+          <ListChecks size={22} aria-hidden="true" /> Full stock shown before you buy
+        </li>
+        <li>
+          <BadgeCheck size={22} aria-hidden="true" /> Verified sellers with trust scores
+        </li>
+      </ul>
       <form
-        className="form market-filters"
+        className="mk-toolbar"
         role="search"
         onSubmit={(e) => {
           e.preventDefault();
           setFilters({ ...filters, q: q.trim() });
         }}
       >
-        <label className="market-search">
+        <label className="mk-search">
           Search titles
           <span className="inline-field">
             <input name="q" value={q} maxLength={60} onChange={(e) => setQ(e.target.value)} />
@@ -162,7 +287,7 @@ export function MarketBrowse() {
             <option value="SECRET">Has secrets left</option>
           </select>
         </label>
-        <label>
+        <label className="mk-price">
           From S$
           <input
             name="min"
@@ -175,7 +300,7 @@ export function MarketBrowse() {
             onChange={(e) => setFilters({ ...filters, min: e.target.value })}
           />
         </label>
-        <label>
+        <label className="mk-price">
           To S$
           <input
             name="max"
@@ -188,7 +313,28 @@ export function MarketBrowse() {
             onChange={(e) => setFilters({ ...filters, max: e.target.value })}
           />
         </label>
+        <label>
+          Sort
+          <select
+            name="sort"
+            value={filters.sort || 'new'}
+            onChange={(e) =>
+              setFilters({ ...filters, sort: e.target.value === 'new' ? '' : e.target.value })
+            }
+          >
+            {SORTS.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </form>
+      {data && (
+        <p className="mk-count tabular" role="status">
+          {data.listings.length} {data.listings.length === 1 ? 'series' : 'series'}
+        </p>
+      )}
       {failed ? (
         <ErrorNote title="The marketplace didn’t load." onRetry={reload}>
           {failed}
@@ -204,7 +350,7 @@ export function MarketBrowse() {
                 variant="ghost"
                 onClick={() => {
                   setQ('');
-                  setFilters({ q: '', theme: '', min: '', max: '', rarity: '' });
+                  setFilters({ ...EMPTY, sort: filters.sort });
                 }}
               >
                 Clear filters
@@ -219,24 +365,9 @@ export function MarketBrowse() {
             : 'Be the first creator to list a series.'}
         </Empty>
       ) : (
-        <ul className="drop-cards market-grid">
+        <ul className="mk-grid">
           {data.listings.map((l) => (
-            <li key={l.id} className="card listing-card">
-              <Link href={'/market/' + l.id} className="listing-link">
-                <ListingArt photo={l.photo} colors={l.colors} title={l.title} />
-                <span className="listing-theme">{l.theme}</span>
-                <h2 className="h3">{l.title}</h2>
-              </Link>
-              <p className="listing-meta">
-                <b>{sgd(l.price_cents)}</b> a box ·{' '}
-                {l.status === 'SOLD_OUT' ? (
-                  <span className="sold">Sold out</span>
-                ) : (
-                  `${l.left} left`
-                )}
-              </p>
-              <TrustChip seller={l.seller} trust={l.trust} />
-            </li>
+            <ListingCard key={l.id} l={l} />
           ))}
         </ul>
       )}
@@ -322,6 +453,7 @@ export function ListingPage() {
             <ListingArt
               photo={null}
               colors={characters.map((c) => c.color).join(',')}
+              names={characters.map((c) => c.name).join('|')}
               title={listing.title}
             />
           )}
@@ -329,12 +461,35 @@ export function ListingPage() {
         <div className="listing-main stack">
           <span className="listing-theme">{listing.theme}</span>
           <h1>{listing.title}</h1>
-          <TrustChip seller={listing.seller} trust={listing.trust} />
-          {listing.description && <p className="lead">{listing.description}</p>}
-          <p className="note">
-            {fulfilmentLabel[listing.fulfilment]}. Your payment is held by LoopBox until you confirm
-            you received what was drawn.
+          <SellerRow seller={listing.seller} trust={listing.trust} verified={!!listing.verified} />
+          <p className="listing-price tabular">
+            {sgd(listing.price_cents)} <small>a box</small>
           </p>
+          {listing.description && <p className="lead">{listing.description}</p>}
+          <ul className="protection">
+            <li>
+              <ShieldCheck size={20} aria-hidden="true" />
+              <span>
+                <b>Buyer protection.</b> Your payment is held by LoopBox until you confirm you
+                received what was drawn.
+              </span>
+            </li>
+            <li>
+              <Truck size={20} aria-hidden="true" />
+              <span>
+                <b>{fulfilmentLabel[listing.fulfilment]}.</b> {shipLine(listing.fulfilment)} of
+                payment (demo policy).
+              </span>
+            </li>
+            <li>
+              <MessageCircleWarning size={20} aria-hidden="true" />
+              <span>
+                <b>Disputes and returns.</b> Wrong, missing or never arrived? Report it from your
+                order before you confirm receipt; we review it and refund upheld reports. Blind
+                boxes can’t be returned for change of mind.
+              </span>
+            </li>
+          </ul>
           <Card className="stack">
             <h2 className="h3">What’s inside: stock and odds</h2>
             <div

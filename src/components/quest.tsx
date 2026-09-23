@@ -6,6 +6,8 @@ import { wave, waveDuration } from '../lib/game';
 import { useCampaign, useLoop } from './provider';
 import { useSearchParams } from 'next/navigation';
 import { KinArt } from './art';
+import { hasOriginalArt } from '../lib/images';
+import { dropHref, themeFor } from '../lib/links';
 import { Button } from './ui';
 import { Pending } from './shell';
 type Session = { id: string; seed: number; mode: string };
@@ -119,12 +121,17 @@ export default function Quest() {
   };
   // The drop data failed to load: show the shared error state with a retry.
   if (loadFailed) return <Pending />;
+  const theme = themeFor(data?.themes, campaignId);
   const currentWave = Math.min(questConfig.waves - 1, Math.floor(tick / waveDuration)),
     w = wave(session?.seed ?? 0, currentWave),
     depth = (tick % waveDuration) / waveDuration;
   return (
-    <section className="wrap quest">
+    <section
+      className="wrap quest"
+      style={theme ? { ['--theme-accent' as string]: theme.accent } : undefined}
+    >
       <div className="quest-heading">
+        {theme && <p className="quest-theme">{theme.name} quest</p>}
         <h1>{mode === 'run' ? 'The fragment run.' : 'The lore challenge.'}</h1>
         <p className="lead">Win to unlock one preorder slot. Free to play, no purchase needed.</p>
         {data && (
@@ -147,7 +154,7 @@ export default function Quest() {
                 Each collector gets {data.attemptLimit} free tries a day so bots can’t farm slots.
                 Your tries reset at midnight, Singapore time.
               </p>
-              <Button href={'/drop' + query} variant="ghost">
+              <Button href={dropHref(data.themes, campaignId)} variant="ghost">
                 Back to the drop
               </Button>
             </div>
@@ -159,7 +166,7 @@ export default function Quest() {
               <h2>{result.won ? 'Quest cleared.' : 'So close. Try again?'}</h2>
               <p>
                 {result.won
-                  ? 'You unlocked one preorder slot. It is held for 15 minutes.'
+                  ? `You unlocked one preorder slot. It is held for ${theme?.slot_hold_minutes ?? 15} minutes. Open your box next.`
                   : `You scored ${result.score}. Playing again is free, or try the untimed lore challenge.`}
               </p>
               {result.won ? (
@@ -169,7 +176,9 @@ export default function Quest() {
                     <strong>1 preorder slot</strong>
                     <small>Held for 15 minutes, while boxes last</small>
                   </div>
-                  <Button href={'/checkout' + query}>Claim preorder slot</Button>
+                  <Button href={result.accessId ? '/open/' + result.accessId : '/checkout' + query}>
+                    Claim preorder slot
+                  </Button>
                 </>
               ) : (
                 <Button onClick={start}>
@@ -232,7 +241,11 @@ export default function Quest() {
                   </>
                 )}
                 <div className="runner" style={{ left: 18 + lane * 32 + '%' }}>
-                  <KinArt id="nova" />
+                  {theme && !hasOriginalArt(theme.slug) ? (
+                    <span className="runner-orb" aria-hidden="true" />
+                  ) : (
+                    <KinArt id="nova" />
+                  )}
                 </div>
               </div>
               {!running && !session ? (

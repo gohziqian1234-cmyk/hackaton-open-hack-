@@ -6,7 +6,8 @@ import { ArrowLeft, MessageCircle, PackageCheck, ShieldAlert } from 'lucide-reac
 import { api, useLoop } from './provider';
 import { Loading, Pending } from './shell';
 import { useJson } from './use-json';
-import { KinArt, BoxArt } from './art';
+import { BoxArt } from './art';
+import { CharacterTile } from './character-image';
 import { ChatBubble, type ChatMessage } from './chat-bubble';
 import { sgd } from '../lib/catalog';
 import { Button, Card, Empty, ErrorNote, Tier } from './ui';
@@ -158,7 +159,12 @@ function BoxReveal({ draws, onDone }: { draws: OrderView['draws']; onDone: () =>
       </p>
       <div className="reveal-stage">
         <div className="burst" aria-hidden="true" />
-        <KinArt id="custom" name={current.name} color={current.color} className="reveal-kin" />
+        <CharacterTile
+          name={current.name}
+          color={current.color}
+          rarity={current.rarity}
+          className="reveal-kin"
+        />
         <div className="halves" aria-hidden="true">
           <div className="half l">
             <BoxArt />
@@ -286,7 +292,7 @@ export function OrderPage() {
           <ul className="drawn-grid">
             {draws.map((d) => (
               <li key={d.box_index} className="drawn">
-                <KinArt id="custom" name={d.name} color={d.color} />
+                <CharacterTile name={d.name} color={d.color} rarity={d.rarity} />
                 <span className="drawn-name">{d.name}</span>
                 <Tier rarity={d.rarity} />
               </li>

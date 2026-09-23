@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 import { openService } from '../../../server/app';
 import { cookies } from 'next/headers';
 import { DomainError } from '../../../server/service';
@@ -114,6 +115,40 @@ export async function POST(request: Request) {
         return response(service.edit(user.id, data.changes));
       case 'waitlist':
         return response(service.waitlist(user.id, data.campaignId));
+      case 'claimPhysical':
+        // Codes are 128-bit random, but guessing is still throttled per account and per address.
+        takeToken('claim:' + user.id, 10, 60000);
+        takeToken('claim-ip:' + clientIp(request), 10, 60000);
+        return response(service.claimPhysical(user.id, data.code));
+      case 'generatePhysical': {
+        const batch = service.generatePhysical(
+          user.id,
+          data.themeSlug,
+          data.count,
+          request.headers.get('origin') ?? new URL(request.url).origin,
+        );
+        const withQr = await Promise.all(
+          batch.map(async (b) => ({
+            ...b,
+            qr:
+              'data:image/svg+xml;charset=utf-8,' +
+              encodeURIComponent(
+                await QRCode.toString(b.url, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' }),
+              ),
+          })),
+        );
+        return response(withQr);
+      }
+      case 'openSlot':
+        return response(service.openSlot(user.id, data.accessId));
+      case 'declineItem':
+        return response(service.declineItem(user.id, data.itemId));
+      case 'confirmItems':
+        return response(
+          await service.confirmItems(user.id, data.itemIds, data.ageConfirmed, data.understood),
+        );
+      case 'notifyTheme':
+        return response(service.notifyTheme(user.id, data.slug));
       case 'sendOtp':
         return response(service.sendOtp(user.id, data.channel, data.target));
       case 'verifyOtp':

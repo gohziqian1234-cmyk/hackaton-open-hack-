@@ -50,23 +50,29 @@ export async function createCheckoutSession(input: {
   quantity: number;
   successPath: string;
   cancelPath: string;
+  /** Several line items (v2 checkout basket). Replaces name/unitAmountCents/quantity. */
+  lines?: { name: string; unitAmountCents: number; quantity: number }[];
+  /** Extra metadata, e.g. order_ids for a basket. Values are set by the server only. */
+  metadata?: Record<string, string>;
 }) {
-  if (input.unitAmountCents * input.quantity > maxChargeCents())
+  const lines = input.lines ?? [
+    { name: input.name, unitAmountCents: input.unitAmountCents, quantity: input.quantity },
+  ];
+  if (lines.reduce((n, l) => n + l.unitAmountCents * l.quantity, 0) > maxChargeCents())
     throw new DomainError('SPENDING_CAP', 422);
   const session = await stripe().checkout.sessions.create({
     mode: 'payment',
-    line_items: [
-      {
-        quantity: input.quantity,
-        price_data: {
-          currency: 'sgd',
-          unit_amount: input.unitAmountCents,
-          product_data: { name: input.name },
-        },
+    line_items: lines.map((l) => ({
+      quantity: l.quantity,
+      price_data: {
+        currency: 'sgd',
+        unit_amount: l.unitAmountCents,
+        product_data: { name: l.name },
       },
-    ],
+    })),
     client_reference_id: input.orderId,
     metadata: {
+      ...input.metadata,
       kind: input.kind,
       order_id: input.orderId,
       user_id: input.userId,
@@ -80,8 +86,12 @@ export async function createCheckoutSession(input: {
   return { id: session.id, url: session.url, expiresAt: session.expires_at * 1000 };
 }
 
-export async function refundPaymentIntent(paymentIntent: string) {
-  await stripe().refunds.create({ payment_intent: paymentIntent });
+/** Refunds a payment in full, or `amountCents` of it (part of a multi-figure basket). */
+export async function refundPaymentIntent(paymentIntent: string, amountCents?: number) {
+  await stripe().refunds.create({
+    payment_intent: paymentIntent,
+    ...(amountCents ? { amount: amountCents } : {}),
+  });
 }
 
 export async function expireCheckoutSession(sessionId: string) {

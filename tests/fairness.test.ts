@@ -129,7 +129,7 @@ describe('committed pool in the database', () => {
     );
     expect(() => s.run('UPDATE pool_units SET allocated=0 WHERE position=0')).toThrow('IMMUTABLE');
     expect(() => s.run('DELETE FROM pool_units')).toThrow('IMMUTABLE');
-    expect(() => s.run("UPDATE fairness_commitments SET commitment_hex=?", 'f'.repeat(64))).toThrow(
+    expect(() => s.run('UPDATE fairness_commitments SET commitment_hex=?', 'f'.repeat(64))).toThrow(
       'IMMUTABLE',
     );
     expect(() => s.run('DELETE FROM fairness_commitments')).toThrow('IMMUTABLE');
@@ -189,9 +189,13 @@ describe('committed pool in the database', () => {
       expect(rows).toHaveLength(96);
       expect(new Set(rows.map((r) => r.pool_unit_id)).size).toBe(96);
       expect(
-        check.prepare("SELECT COUNT(*) AS n FROM pool_units WHERE allocated=0").get(),
+        check
+          .prepare(
+            "SELECT COUNT(*) AS n FROM pool_units WHERE campaign_id='astral' AND allocated=0",
+          )
+          .get(),
       ).toEqual({ n: 0 });
-      expect(check.prepare("SELECT COUNT(*) AS n FROM orders").get()).toEqual({ n: 96 });
+      expect(check.prepare('SELECT COUNT(*) AS n FROM orders').get()).toEqual({ n: 96 });
       check.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });

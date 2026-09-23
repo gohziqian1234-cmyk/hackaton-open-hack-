@@ -1,5 +1,20 @@
 # PROJECT_STATE
 
+v2 REDESIGN COMPLETE (loopbox-v2-kit, 8 phases on branch claude/eloquent-feynman-4kj3zr). Earlier: P0 complete (m6-green), feature freeze (m9-green).
+
+GOAL: Win NYP Open Hack with a live golden path (play → open → confirm & pay → trade → verify fairness) across three live drops, plus thin B2B and C2C, built entirely by prompting.
+DONE (v2): Phase 1 kit images in public/images/themes, themes table + idempotent seed from src/data/themes.seed.json (Naruto 100 and Cyberpunk: Edgerunners 60 as committed-shuffle campaigns), image helper and CharacterImage (robot art kept only for Astral Kin). Phase 2 v2 tokens site-wide and the new asymmetric homepage. Phase 3 /drops browser with tabs, To be continued + Notify me, data-driven drop pages with lightbox and blurred secrets. Phase 4 open-before-pay: order_items state machine, /checkout with decline and countdowns, "Are you sure?" modal, demo payment for concept drops, multi-figure Stripe sessions, anti-abuse tests. Phase 5 OpeningSequence (3D box, foil pack, swipe-to-tear with canvas trail, rarity reveal; skip, keyboard, reduced motion). Phase 6 physical figures by QR (hash-only codes, camera/photo/manual, /claim/[code], /admin/qr-sheet, seed:physical). Phase 7 marketplace storefront (trust strip, URL-synced filters + sort, buyer-first cards, protection box). Phase 8 QA: 173 unit, 12 e2e, Lighthouse a11y 100 on six pages, fake-webcam scan, screenshots in docs/screens. Details: docs/REDESIGN_NOTES.md.
+IN PROGRESS: nothing
+BLOCKED: nothing
+BUGS: none known.
+DECISIONS (v2): kit data lives in src/data (data/ is the ignored SQLite folder); Astral Kin keeps Stripe Checkout Sessions + signed webhook (Payment Links can't bind to a reservation, AGENTS §12); opening draws the lowest free pool position (unchanged rule) and holds it, confirmation allocates exactly that unit; per-person max counts slots won; admin QR sheet generates fresh batches because stored codes are hashes only; "Trade it" on an unpaid figure asks to confirm first (trade logic unchanged); camera=(self) in Permissions-Policy; Dockerfile not changed (it doesn't copy public/ — noted, Render unaffected); protected e2e strings changed where the brief changed the screen (AGENTS §24/§25).
+NEXT 3 ACTIONS: 1) redeploy the branch on Render (render.yaml still points at the older branch name — update it or pick the branch in the dashboard)  2) print a QR sheet from /admin/qr-sheet for the physical demo  3) rehearse the updated DEMO.md on the live URL
+LAST GREEN TAG: m9-green (v2 commits are green but untagged)
+
+---
+
+Previous state (before v2), kept for history:
+
 P0 COMPLETE (m6-green). FEATURE FREEZE (m9-green): only fixes and the demo pack from here.
 
 GOAL: Win NYP Open Hack with a redesigned, live golden path (play → Stripe test pay → reveal → same-rarity swap → verify fairness) plus thin B2B and C2C, built entirely by prompting in 48 h.

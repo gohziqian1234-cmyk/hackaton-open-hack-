@@ -296,6 +296,56 @@ CREATE TABLE IF NOT EXISTS reports(id TEXT PRIMARY KEY,market_order_id TEXT NOT 
         seedMarketDemo(db, Date.now());
     },
   },
+  {
+    id: 9,
+    name: 'v2 themes (drops browser) and character image slugs',
+    up: (db) => {
+      // One row per theme card on /drops. Live themes point at the campaign that sells them;
+      // coming-soon themes have no campaign. Filled from src/data/themes.seed.json by seedThemes().
+      db.exec(`
+CREATE TABLE IF NOT EXISTS themes(id TEXT PRIMARY KEY,slug TEXT NOT NULL UNIQUE CHECK(length(slug) BETWEEN 1 AND 64),name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 80),status TEXT NOT NULL CHECK(status IN ('live','coming_soon')),payment_mode TEXT CHECK(payment_mode IS NULL OR payment_mode IN ('stripe','demo')),is_licensed_concept INTEGER NOT NULL DEFAULT 0 CHECK(is_licensed_concept IN (0,1)),sort_order INTEGER NOT NULL,tagline TEXT NOT NULL,description TEXT NOT NULL,accent TEXT NOT NULL CHECK(accent GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'),accent_secondary TEXT,price_cents INTEGER CHECK(price_cents IS NULL OR price_cents>0),unit_cap INTEGER CHECK(unit_cap IS NULL OR unit_cap>0),per_person_max INTEGER CHECK(per_person_max IS NULL OR per_person_max>0),slot_hold_minutes INTEGER NOT NULL DEFAULT 15 CHECK(slot_hold_minutes BETWEEN 1 AND 1440),reservation_minutes INTEGER NOT NULL DEFAULT 30 CHECK(reservation_minutes BETWEEN 1 AND 1440),closes_at INTEGER,cover_image TEXT,campaign_id TEXT UNIQUE REFERENCES campaigns(id),created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS themes_order ON themes(sort_order);`);
+      // Image key of a character inside its theme (e.g. "itachi" → naruto/itachi in the manifest).
+      addColumn(db, 'characters', 'slug', 'TEXT');
+      db.exec("UPDATE characters SET slug=id WHERE campaign_id='astral' AND slug IS NULL");
+    },
+  },
+  {
+    id: 10,
+    name: 'v2 notify-me list for coming-soon themes',
+    up: (db) => {
+      db.exec(`
+CREATE TABLE IF NOT EXISTS theme_interest(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),theme_id TEXT NOT NULL REFERENCES themes(id),created_at INTEGER NOT NULL,UNIQUE(user_id,theme_id));
+CREATE INDEX IF NOT EXISTS theme_interest_theme ON theme_interest(theme_id);`);
+    },
+  },
+  {
+    id: 11,
+    name: 'v2 open-before-pay: order items and their payment attempts',
+    up: (db) => {
+      // One row per opened slot. Opening draws a pool unit and holds it (no allocation yet);
+      // the hold ends when the item is confirmed (paid → allocation), declined or expired.
+      // access_id UNIQUE: a slot can be opened once, so declining never re-rolls.
+      db.exec(`
+CREATE TABLE IF NOT EXISTS order_items(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),campaign_id TEXT NOT NULL REFERENCES campaigns(id),access_id TEXT NOT NULL UNIQUE REFERENCES access(id),pool_unit_id TEXT NOT NULL REFERENCES pool_units(id),character_id TEXT NOT NULL REFERENCES characters(id),state TEXT NOT NULL CHECK(state IN ('opened','confirmed','in_production','shipped','declined','expired')),slot_won_at INTEGER NOT NULL,opened_at INTEGER NOT NULL,reserved_until INTEGER NOT NULL,confirmed_at INTEGER,closed_at INTEGER,payment_mode TEXT CHECK(payment_mode IS NULL OR payment_mode IN ('stripe','demo')),payment_ref TEXT,order_id TEXT UNIQUE REFERENCES orders(id),allocation_id TEXT UNIQUE REFERENCES allocations(id),created_at INTEGER NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS order_items_held_unit ON order_items(pool_unit_id) WHERE state IN ('opened','confirmed','in_production','shipped');
+CREATE INDEX IF NOT EXISTS order_items_user ON order_items(user_id,campaign_id,state);
+CREATE INDEX IF NOT EXISTS order_items_expiry ON order_items(state,reserved_until);
+CREATE TABLE IF NOT EXISTS item_orders(order_id TEXT PRIMARY KEY REFERENCES orders(id),item_id TEXT NOT NULL REFERENCES order_items(id),basket_id TEXT NOT NULL,created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS item_orders_item ON item_orders(item_id,created_at);
+CREATE INDEX IF NOT EXISTS item_orders_basket ON item_orders(basket_id);`);
+    },
+  },
+  {
+    id: 12,
+    name: 'v2 physical figures claimed by QR code',
+    up: (db) => {
+      // code_hash = SHA-256 of the 128-bit code; the code itself is never stored.
+      db.exec(`
+CREATE TABLE IF NOT EXISTS physical_items(id TEXT PRIMARY KEY,code_hash TEXT NOT NULL UNIQUE CHECK(length(code_hash)=64),theme_id TEXT NOT NULL REFERENCES themes(id),character_id TEXT NOT NULL REFERENCES characters(id),serial_no INTEGER NOT NULL CHECK(serial_no>0),claimed_by TEXT REFERENCES users(id),claimed_at INTEGER,created_at INTEGER NOT NULL,UNIQUE(character_id,serial_no),CHECK((claimed_by IS NULL)=(claimed_at IS NULL)));
+CREATE INDEX IF NOT EXISTS physical_items_owner ON physical_items(claimed_by,claimed_at);`);
+    },
+  },
 ];
 
 export function migrate(db: DatabaseSync) {

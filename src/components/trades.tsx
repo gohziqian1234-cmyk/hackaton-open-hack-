@@ -6,10 +6,34 @@ import { Check, Repeat2, ShieldCheck } from 'lucide-react';
 import { kinOf, useLoop } from './provider';
 import { CollectorGate } from './collection';
 import { Pending } from './shell';
-import { KinArt } from './art';
+import { CharacterImage } from './character-image';
+import { themeFor } from '../lib/links';
+import type { Kin } from './provider';
 import { phaseIndex } from '../lib/catalog';
 import type { Match } from '../lib/types';
 import { Button, Empty, Tier } from './ui';
+/** Character picture through the shared image helper (kit image, Astral Kin art or tile). */
+function Art({ c }: { c: Kin }) {
+  const { data } = useLoop();
+  return <CharacterImage character={c} theme={themeFor(data?.themes, c.campaign_id)} />;
+}
+/** Arriving from "Trade it" on an unpaid figure: trades happen between confirmed figures. */
+function ConfirmFirst({ itemId }: { itemId: string }) {
+  const { data } = useLoop();
+  const item = data?.items.find((i) => i.id === itemId && i.state === 'opened');
+  if (!item || !data) return null;
+  const name = data.characters.find((c) => c.id === item.character_id)?.name ?? 'this figure';
+  return (
+    <div className="notice trade-first" role="status">
+      <p>
+        Trades happen between confirmed figures, so both collectors know the other one is real.
+        Confirm {name} first, then pick what you would swap it for here, any time before the
+        preorder closes.
+      </p>
+      <Button href={'/checkout?select=' + item.id}>Confirm {name}</Button>
+    </div>
+  );
+}
 export function Trades() {
   const { data, act, busy } = useLoop(),
     params = useSearchParams(),
@@ -47,6 +71,7 @@ export function Trades() {
           {closed ? 'Trading closed' : 'Trading open'}
         </span>
       </div>
+      {params.get('item') && <ConfirmFirst itemId={params.get('item')!} />}
       {done.length > 0 && (
         <section className="trade-history" aria-label="Completed trades">
           {done.map((m) => (
@@ -99,7 +124,7 @@ export function Trades() {
                 </select>
                 {selected && ch && (
                   <div className="offer-preview">
-                    <KinArt id={ch.id} name={ch.name} color={ch.color} />
+                    <Art c={ch} />
                     <Tier rarity={ch.rarity} />
                     <p className="offer-name">{ch.name}</p>
                   </div>
@@ -123,7 +148,7 @@ export function Trades() {
                           )
                         }
                       />
-                      <KinArt id={c.id} name={c.name} color={c.color} />
+                      <Art c={{ ...c, color: c.color ?? '' }} />
                       <span>
                         <strong>{c.name}</strong>
                         <Tier rarity={c.rarity} />
@@ -211,11 +236,13 @@ function MatchCard({ match: m }: { match: Match }) {
   return (
     <section className="match" aria-labelledby={'match-' + m.id}>
       <h2 id={'match-' + m.id}>Two kin. Two happy collectors.</h2>
-      <p className="match-sub">You matched with {m.partner}. Both boxes are held until you decide.</p>
+      <p className="match-sub">
+        You matched with {m.partner}. Both boxes are held until you decide.
+      </p>
       <div className="match-cards">
         <div className="card mcard">
           <span className="mcard-label">You give</span>
-          <KinArt id={offered?.id} name={offered?.name} color={offered?.color} />
+          {offered && <Art c={offered} />}
           <h3>{offered?.name}</h3>
           {offered && <Tier rarity={offered.rarity} />}
         </div>
@@ -224,7 +251,7 @@ function MatchCard({ match: m }: { match: Match }) {
         </div>
         <div className="card mcard">
           <span className="mcard-label">{partner} gives</span>
-          <KinArt id={requested?.id} name={requested?.name} color={requested?.color} />
+          {requested && <Art c={requested} />}
           <h3>{requested?.name}</h3>
           {requested && <Tier rarity={requested.rarity} />}
         </div>

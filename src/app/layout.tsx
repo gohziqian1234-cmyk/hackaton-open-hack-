@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import '@fontsource-variable/unbounded';
 import '@fontsource-variable/figtree';
 import './globals.css';
+import './v2.css';
 import { Shell } from '../components/shell';
 export const metadata: Metadata = {
   title: 'LoopBox — A little mystery, made to order.',
