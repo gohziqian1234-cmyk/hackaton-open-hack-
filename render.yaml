@@ -9,7 +9,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    branch: claude/great-ramanujan-ou59s1
+    branch: claude/eloquent-feynman-4kj3zr
     buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
