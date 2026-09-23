@@ -6,7 +6,7 @@ import { BadgeCheck, ImagePlus, Plus, Store, Trash2 } from 'lucide-react';
 import { messageFor, useLoop } from './provider';
 import { Loading, Pending } from './shell';
 import { useJson } from './use-json';
-import { KinArt } from './art';
+import { CharacterTile } from './character-image';
 import type { ListingView } from './market';
 import { sgd } from '../lib/catalog';
 import { Button, Card, Empty, ErrorNote, Stat } from './ui';
@@ -469,7 +469,7 @@ export function ListingEditor() {
           {draft.characters.map((c, i) => (
             <fieldset key={i} className="kin-row">
               <legend>Character {i + 1}</legend>
-              <KinArt id="custom" name={c.name || 'New character'} color={c.color} />
+              <CharacterTile name={c.name || 'New character'} color={c.color} rarity={c.rarity} />
               <div className="kin-fields">
                 <div className="form-row">
                   <label>

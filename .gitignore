@@ -1,9 +1,16 @@
 node_modules/
 .next/
 data/
+# Only the root data/ folder (SQLite) is runtime; bundled seed data is committed.
+!src/data/
+!loopbox-v2-kit/data/
 .env*
 !.env.example
 *.tsbuildinfo
 test-results/
 playwright-report/
 work/
+
+# v2 kit: large reference media and duplicate images stay out of git (see docs/REDESIGN_NOTES.md)
+loopbox-v2-kit/reference/
+loopbox-v2-kit/public/

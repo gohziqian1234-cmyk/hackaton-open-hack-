@@ -1,0 +1,73 @@
+{
+  "_readme": "Single source of truth for Drops. Codex: seed the DB from this file. Do not hard-code these values in components. 'astral-kin' keeps its existing DB data; only its status/order/card fields are defined here.",
+  "currency": "SGD",
+  "themes": [
+    {
+      "slug": "astral-kin",
+      "name": "Astral Kin",
+      "status": "live",
+      "payment_mode": "stripe",
+      "is_licensed_concept": false,
+      "order": 1,
+      "tagline": "Seven guardians from the edge of the map.",
+      "description": "Our original line. Four common, two rare and one secret. Made only when you choose to bring them home.",
+      "accent": "#FFD84D",
+      "accent_secondary": "#5EEAD4",
+      "use_existing_characters": true,
+      "cover_image": "EXISTING_ASTRAL_KIN_IMAGE"
+    },
+    {
+      "slug": "naruto",
+      "name": "Naruto",
+      "status": "live",
+      "payment_mode": "demo",
+      "is_licensed_concept": true,
+      "order": 2,
+      "tagline": "Four shinobi from the Hidden Leaf.",
+      "description": "Team 7 and the Uchiha legacy. Two common, one rare and one secret. A concept partner drop for our pitch.",
+      "accent": "#FF7A1A",
+      "accent_secondary": "#3B82F6",
+      "price_cents": 1990,
+      "unit_cap": 100,
+      "per_person_max": 2,
+      "slot_hold_minutes": 15,
+      "reservation_minutes": 30,
+      "closes_in_days": 7,
+      "cover_image": "/images/themes/naruto/cover.webp",
+      "characters": [
+        { "slug": "naruto", "name": "Naruto Uzumaki", "rarity": "common", "stock_total": 40, "lore": "The loudest ninja in the village, and he never gives up." },
+        { "slug": "sakura", "name": "Sakura Haruno", "rarity": "common", "stock_total": 40, "lore": "Precise, fearless and far stronger than she looks." },
+        { "slug": "sasuke", "name": "Sasuke Uchiha", "rarity": "rare", "stock_total": 15, "lore": "The last Uchiha, walking a path of his own." },
+        { "slug": "itachi", "name": "Itachi Uchiha", "rarity": "secret", "stock_total": 5, "lore": "A shinobi of few words and heavy secrets." }
+      ]
+    },
+    {
+      "slug": "edgerunners",
+      "name": "Cyberpunk: Edgerunners",
+      "status": "live",
+      "payment_mode": "demo",
+      "is_licensed_concept": true,
+      "order": 3,
+      "tagline": "Three runners from Night City.",
+      "description": "Street crew figures with neon-lit bases. One common, one rare and one secret. A concept partner drop for our pitch.",
+      "accent": "#F3E600",
+      "accent_secondary": "#00F0FF",
+      "price_cents": 2290,
+      "unit_cap": 60,
+      "per_person_max": 2,
+      "slot_hold_minutes": 15,
+      "reservation_minutes": 30,
+      "closes_in_days": 7,
+      "cover_image": "/images/themes/edgerunners/cover.webp",
+      "characters": [
+        { "slug": "rebecca", "name": "Rebecca", "rarity": "common", "stock_total": 42, "lore": "Small frame, oversized arsenal, zero chill." },
+        { "slug": "david-martinez", "name": "David Martinez", "rarity": "rare", "stock_total": 15, "lore": "A street kid in a yellow jacket, chasing a brighter tomorrow." },
+        { "slug": "lucy", "name": "Lucy", "rarity": "secret", "stock_total": 3, "lore": "A quiet netrunner who dreams of the moon." }
+      ]
+    },
+    { "slug": "jujutsu-kaisen", "name": "Jujutsu Kaisen", "status": "coming_soon", "is_licensed_concept": true, "order": 4, "tagline": "Cursed energy, coming soon.", "description": "A sorcerer lineup in development with a partner.", "accent": "#7C3AED" },
+    { "slug": "genshin-impact", "name": "Genshin Impact", "status": "coming_soon", "is_licensed_concept": true, "order": 5, "tagline": "Travellers from Teyvat, coming soon.", "description": "An elemental lineup in development with a partner.", "accent": "#38BDF8" },
+    { "slug": "sanrio", "name": "Sanrio Friends", "status": "coming_soon", "is_licensed_concept": true, "order": 6, "tagline": "Soft friends, coming soon.", "description": "A pastel lineup in development with a partner.", "accent": "#F9A8D4" },
+    { "slug": "spy-family", "name": "Spy × Family", "status": "coming_soon", "is_licensed_concept": true, "order": 7, "tagline": "A family of secrets, coming soon.", "description": "A mission-themed lineup in development with a partner.", "accent": "#22C55E" }
+  ]
+}

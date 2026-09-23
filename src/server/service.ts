@@ -19,7 +19,7 @@ import type {
   Allocation,
   Campaign,
   User,
-  Snapshot,
+  CoreSnapshot,
   Match,
   Access,
   Analytics,
@@ -1106,7 +1106,7 @@ export class Loopbox {
     }
     return c;
   }
-  snapshot(user: User | null, campaignId = 'astral'): Snapshot {
+  snapshot(user: User | null, campaignId = 'astral'): CoreSnapshot {
     this.sweepExpired();
     const c = this.visibleCampaign(user, campaignId);
     const id = user?.id ?? '';
@@ -1115,9 +1115,11 @@ export class Loopbox {
       campaign: c,
       campaigns: this.publicCampaigns(),
       characters: this.all<CharacterInfo>(
-        'SELECT id,campaign_id,name,rarity,units,color,description FROM characters WHERE campaign_id=? OR campaign_id IN (SELECT campaign_id FROM allocations WHERE owner_id=?) ORDER BY rowid',
+        `SELECT c.id,c.campaign_id,c.name,c.rarity,c.units,c.color,c.description,c.slug,
+          (SELECT COUNT(*) FROM pool_units p WHERE p.character_id=c.id AND p.allocated=1) AS pulled
+         FROM characters c WHERE c.campaign_id=? OR c.campaign_id IN (${this.ownedCampaignsSql()}) ORDER BY c.rowid`,
         c.id,
-        id,
+        ...this.ownedCampaignsArgs(id),
       ),
       weights: this.all<{ weight: number }>(
         'SELECT weight FROM characters WHERE campaign_id=? ORDER BY rowid',
@@ -1156,6 +1158,13 @@ export class Loopbox {
       attemptLimit: this.attemptLimit(c),
       attemptsLeft: Math.max(0, this.attemptLimit(c) - this.attemptsUsed(id, c.id)),
     };
+  }
+  /** Campaigns whose characters the user needs to see (their boxes, items and figures). */
+  protected ownedCampaignsSql() {
+    return 'SELECT campaign_id FROM allocations WHERE owner_id=?';
+  }
+  protected ownedCampaignsArgs(id: string): SQLInputValue[] {
+    return [id];
   }
   waitlist(id: string, campaignId = 'astral') {
     this.collector(id);

@@ -56,6 +56,36 @@ export interface CharacterInfo {
   units: number;
   color: string | null;
   description: string | null;
+  /** Image key inside the theme (image manifest), when the character has one. */
+  slug?: string | null;
+  /** Boxes of this character already drawn (opened or paid) in its drop. */
+  pulled?: number;
+}
+/** One card on /drops: a seeded theme, or a published partner campaign without a theme row. */
+export interface ThemeInfo {
+  slug: string;
+  name: string;
+  status: 'live' | 'coming_soon';
+  payment_mode: 'stripe' | 'demo' | null;
+  licensed: boolean;
+  sort_order: number;
+  tagline: string;
+  description: string;
+  accent: string;
+  accent_secondary: string | null;
+  cover: string | null;
+  campaign_id: string | null;
+  phase: string | null;
+  price: number | null;
+  capacity: number | null;
+  claimed: number;
+  max_per_user: number | null;
+  closes_at: number | null;
+  starts_at: number | null;
+  slot_hold_minutes: number;
+  reservation_minutes: number;
+  mix: { COMMON: number; RARE: number; SECRET: number };
+  partner: string | null;
 }
 export interface CampaignCard {
   id: string;
@@ -70,7 +100,11 @@ export interface CampaignCard {
   partner: string | null;
   partner_type: 'BRAND' | 'COLLECTIVE' | null;
 }
-export interface Snapshot {
+export type Snapshot = CoreSnapshot & {
+  themes: ThemeInfo[];
+  interest: string[];
+};
+export interface CoreSnapshot {
   serverTime: number;
   campaign: Campaign;
   campaigns: CampaignCard[];

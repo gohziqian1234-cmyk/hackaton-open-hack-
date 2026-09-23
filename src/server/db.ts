@@ -6,13 +6,27 @@ import { buildPool, commitment, newSeedHex, shuffle } from '../domain/fairness';
 import { migrate, pragmas, wipeAll } from './schema';
 import { DEMO_SEED_HEX, DEMO_SOLD } from './seed';
 import { seedMarketDemo, seedPartnerDemo } from './demo-data';
+import { seedThemes, type ThemeSeed } from './themes';
+import themeSeed from '../data/themes.seed.json';
 export function createDatabase(path: string) {
   if (path !== ':memory:') mkdirSync(dirname(resolve(path)), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec(pragmas);
   migrate(db);
   seed(db);
+  upsertThemes(db);
   return db;
+}
+/** Brings the /drops themes in line with src/data/themes.seed.json. Safe to run on every start. */
+export function upsertThemes(db: DatabaseSync, now = Date.now()) {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    seedThemes(db, themeSeed as ThemeSeed, now);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 const LEGACY_WEIGHTS = [18, 17, 14, 16, 12, 11, 5];
 /** Seeds the demo drop on an empty database (no campaigns). Clears any leftover rows first. */
@@ -125,6 +139,7 @@ export function seed(db: DatabaseSync) {
     }
     seedPartnerDemo(db, now);
     seedMarketDemo(db, now);
+    seedThemes(db, themeSeed as ThemeSeed, now);
     if (sarah >= 0 && sarah < DEMO_SOLD)
       db.prepare('INSERT INTO preferences (allocation_id,character_id) VALUES (?,?)').run(
         'sarah-aurora',

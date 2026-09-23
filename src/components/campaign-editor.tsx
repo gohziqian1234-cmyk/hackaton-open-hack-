@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Plus, Trash2 } from 'lucide-react';
 import { useLoop } from './provider';
 import { Loading } from './shell';
-import { KinArt } from './art';
+import { CharacterTile } from './character-image';
 import { phaseLabel, sgd } from '../lib/catalog';
 import { Button, Card, ErrorNote, Tier } from './ui';
 
@@ -142,7 +142,7 @@ export function CampaignEditor() {
           <ul className="editor-kin-list">
             {draft.characters.map((c) => (
               <li key={c.name}>
-                <KinArt id="custom" name={c.name} color={c.color} />
+                <CharacterTile name={c.name} color={c.color} rarity={c.rarity} />
                 <strong>{c.name}</strong>
                 <Tier rarity={c.rarity} />
                 <span className="note">{c.units} boxes</span>
@@ -316,7 +316,7 @@ export function CampaignEditor() {
           {draft.characters.map((c, i) => (
             <fieldset key={i} className="kin-row">
               <legend>Character {i + 1}</legend>
-              <KinArt id="custom" name={c.name || 'New character'} color={c.color} />
+              <CharacterTile name={c.name || 'New character'} color={c.color} rarity={c.rarity} />
               <div className="kin-fields">
                 <div className="form-row">
                   <label>

@@ -1,0 +1,177 @@
+{
+  "edgerunners/rebecca": {
+    "poster": {
+      "path": "/images/themes/edgerunners/rebecca-poster.webp",
+      "width": 1024,
+      "height": 1536
+    },
+    "hero": {
+      "path": "/images/themes/edgerunners/rebecca-hero.webp",
+      "width": 800,
+      "height": 1200
+    },
+    "card": {
+      "path": "/images/themes/edgerunners/rebecca-card.webp",
+      "width": 600,
+      "height": 600
+    },
+    "thumb": {
+      "path": "/images/themes/edgerunners/rebecca-thumb.webp",
+      "width": 200,
+      "height": 200
+    },
+    "source_file": "reference/originals/edgerunners/rebecca.png"
+  },
+  "edgerunners/david-martinez": {
+    "poster": {
+      "path": "/images/themes/edgerunners/david-martinez-poster.webp",
+      "width": 1024,
+      "height": 1536
+    },
+    "hero": {
+      "path": "/images/themes/edgerunners/david-martinez-hero.webp",
+      "width": 800,
+      "height": 1200
+    },
+    "card": {
+      "path": "/images/themes/edgerunners/david-martinez-card.webp",
+      "width": 600,
+      "height": 600
+    },
+    "thumb": {
+      "path": "/images/themes/edgerunners/david-martinez-thumb.webp",
+      "width": 200,
+      "height": 200
+    },
+    "source_file": "reference/originals/edgerunners/david-martinez.png"
+  },
+  "edgerunners/lucy": {
+    "poster": {
+      "path": "/images/themes/edgerunners/lucy-poster.webp",
+      "width": 1024,
+      "height": 1536
+    },
+    "hero": {
+      "path": "/images/themes/edgerunners/lucy-hero.webp",
+      "width": 800,
+      "height": 1200
+    },
+    "card": {
+      "path": "/images/themes/edgerunners/lucy-card.webp",
+      "width": 600,
+      "height": 600
+    },
+    "thumb": {
+      "path": "/images/themes/edgerunners/lucy-thumb.webp",
+      "width": 200,
+      "height": 200
+    },
+    "source_file": "reference/originals/edgerunners/lucy.png"
+  },
+  "naruto/naruto": {
+    "poster": {
+      "path": "/images/themes/naruto/naruto-poster.webp",
+      "width": 1024,
+      "height": 1536
+    },
+    "hero": {
+      "path": "/images/themes/naruto/naruto-hero.webp",
+      "width": 800,
+      "height": 1200
+    },
+    "card": {
+      "path": "/images/themes/naruto/naruto-card.webp",
+      "width": 600,
+      "height": 600
+    },
+    "thumb": {
+      "path": "/images/themes/naruto/naruto-thumb.webp",
+      "width": 200,
+      "height": 200
+    },
+    "source_file": "reference/originals/naruto/naruto.png"
+  },
+  "naruto/sakura": {
+    "poster": {
+      "path": "/images/themes/naruto/sakura-poster.webp",
+      "width": 1024,
+      "height": 1536
+    },
+    "hero": {
+      "path": "/images/themes/naruto/sakura-hero.webp",
+      "width": 800,
+      "height": 1200
+    },
+    "card": {
+      "path": "/images/themes/naruto/sakura-card.webp",
+      "width": 600,
+      "height": 600
+    },
+    "thumb": {
+      "path": "/images/themes/naruto/sakura-thumb.webp",
+      "width": 200,
+      "height": 200
+    },
+    "source_file": "reference/originals/naruto/sakura.png"
+  },
+  "naruto/sasuke": {
+    "poster": {
+      "path": "/images/themes/naruto/sasuke-poster.webp",
+      "width": 1024,
+      "height": 1536
+    },
+    "hero": {
+      "path": "/images/themes/naruto/sasuke-hero.webp",
+      "width": 800,
+      "height": 1200
+    },
+    "card": {
+      "path": "/images/themes/naruto/sasuke-card.webp",
+      "width": 600,
+      "height": 600
+    },
+    "thumb": {
+      "path": "/images/themes/naruto/sasuke-thumb.webp",
+      "width": 200,
+      "height": 200
+    },
+    "source_file": "reference/originals/naruto/sasuke.png"
+  },
+  "naruto/itachi": {
+    "poster": {
+      "path": "/images/themes/naruto/itachi-poster.webp",
+      "width": 1024,
+      "height": 1536
+    },
+    "hero": {
+      "path": "/images/themes/naruto/itachi-hero.webp",
+      "width": 800,
+      "height": 1200
+    },
+    "card": {
+      "path": "/images/themes/naruto/itachi-card.webp",
+      "width": 600,
+      "height": 600
+    },
+    "thumb": {
+      "path": "/images/themes/naruto/itachi-thumb.webp",
+      "width": 200,
+      "height": 200
+    },
+    "source_file": "reference/originals/naruto/itachi.png"
+  },
+  "edgerunners/_cover": {
+    "cover": {
+      "path": "/images/themes/edgerunners/cover.webp",
+      "width": 1600,
+      "height": 1000
+    }
+  },
+  "naruto/_cover": {
+    "cover": {
+      "path": "/images/themes/naruto/cover.webp",
+      "width": 1600,
+      "height": 1000
+    }
+  }
+}

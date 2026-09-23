@@ -296,6 +296,20 @@ CREATE TABLE IF NOT EXISTS reports(id TEXT PRIMARY KEY,market_order_id TEXT NOT 
         seedMarketDemo(db, Date.now());
     },
   },
+  {
+    id: 9,
+    name: 'v2 themes (drops browser) and character image slugs',
+    up: (db) => {
+      // One row per theme card on /drops. Live themes point at the campaign that sells them;
+      // coming-soon themes have no campaign. Filled from src/data/themes.seed.json by seedThemes().
+      db.exec(`
+CREATE TABLE IF NOT EXISTS themes(id TEXT PRIMARY KEY,slug TEXT NOT NULL UNIQUE CHECK(length(slug) BETWEEN 1 AND 64),name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 80),status TEXT NOT NULL CHECK(status IN ('live','coming_soon')),payment_mode TEXT CHECK(payment_mode IS NULL OR payment_mode IN ('stripe','demo')),is_licensed_concept INTEGER NOT NULL DEFAULT 0 CHECK(is_licensed_concept IN (0,1)),sort_order INTEGER NOT NULL,tagline TEXT NOT NULL,description TEXT NOT NULL,accent TEXT NOT NULL CHECK(accent GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'),accent_secondary TEXT,price_cents INTEGER CHECK(price_cents IS NULL OR price_cents>0),unit_cap INTEGER CHECK(unit_cap IS NULL OR unit_cap>0),per_person_max INTEGER CHECK(per_person_max IS NULL OR per_person_max>0),slot_hold_minutes INTEGER NOT NULL DEFAULT 15 CHECK(slot_hold_minutes BETWEEN 1 AND 1440),reservation_minutes INTEGER NOT NULL DEFAULT 30 CHECK(reservation_minutes BETWEEN 1 AND 1440),closes_at INTEGER,cover_image TEXT,campaign_id TEXT UNIQUE REFERENCES campaigns(id),created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS themes_order ON themes(sort_order);`);
+      // Image key of a character inside its theme (e.g. "itachi" → naruto/itachi in the manifest).
+      addColumn(db, 'characters', 'slug', 'TEXT');
+      db.exec("UPDATE characters SET slug=id WHERE campaign_id='astral' AND slug IS NULL");
+    },
+  },
 ];
 
 export function migrate(db: DatabaseSync) {

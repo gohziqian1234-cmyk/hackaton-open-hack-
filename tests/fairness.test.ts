@@ -189,7 +189,9 @@ describe('committed pool in the database', () => {
       expect(rows).toHaveLength(96);
       expect(new Set(rows.map((r) => r.pool_unit_id)).size).toBe(96);
       expect(
-        check.prepare("SELECT COUNT(*) AS n FROM pool_units WHERE allocated=0").get(),
+        check
+          .prepare("SELECT COUNT(*) AS n FROM pool_units WHERE campaign_id='astral' AND allocated=0")
+          .get(),
       ).toEqual({ n: 0 });
       expect(check.prepare("SELECT COUNT(*) AS n FROM orders").get()).toEqual({ n: 96 });
       check.close();
