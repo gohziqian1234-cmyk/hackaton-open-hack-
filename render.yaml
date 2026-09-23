@@ -1,0 +1,46 @@
+# Render Blueprint: one web service running `npm start` on Node 24.
+# Deploy: https://render.com/deploy?repo=https://github.com/gohziqian1234-cmyk/hackaton-open-hack-
+# Free plan note: the free instance has no persistent disk, so the SQLite demo database is
+# re-seeded (93 / 100) whenever the service restarts or redeploys. For data that survives
+# restarts, switch `plan` to starter and uncomment the disk block below.
+services:
+  - type: web
+    name: loopbox
+    runtime: node
+    plan: free
+    region: singapore
+    branch: claude/great-ramanujan-ou59s1
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: '24'
+      - key: HOSTNAME
+        value: 0.0.0.0
+      - key: LOOPBOX_DB
+        value: data/loopbox.sqlite
+      # Demo walkthrough: seeded identities, instant demo win, simulated payment.
+      - key: DEMO_MODE
+        value: 'true'
+      # Anyone with the link can switch to Admin. Set 'false' after judging.
+      - key: ADMIN_DEMO
+        value: 'true'
+      - key: SIMULATE_PAYMENTS
+        value: 'true'
+      - key: HTTPS_ONLY
+        value: 'true'
+      - key: COOKIE_SECURE
+        value: 'true'
+      - key: MAX_CHARGE_CENTS
+        value: '100000'
+      # Optional: Stripe TEST keys. Leave empty to use the simulated payment.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+    # disk:
+    #   name: loopbox-data
+    #   mountPath: /opt/render/project/src/data
+    #   sizeGB: 1

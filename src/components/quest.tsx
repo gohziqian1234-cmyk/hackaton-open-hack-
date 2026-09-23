@@ -1,24 +1,20 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import {
-  ArrowLeft,
-  ArrowRight,
-  ArrowUpRight,
-  Pause,
-  Play,
-  Check,
-  RotateCcw,
-  VolumeX,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Clock, Pause, Play, RotateCcw } from 'lucide-react';
 import { questConfig, lore } from '../lib/catalog';
 import { wave, waveDuration } from '../lib/game';
-import { useLoop } from './provider';
+import { useCampaign, useLoop } from './provider';
+import { useSearchParams } from 'next/navigation';
 import { KinArt } from './art';
+import { Button } from './ui';
+import { Pending } from './shell';
 type Session = { id: string; seed: number; mode: string };
 type Result = { won: boolean; score: number; accessId?: string };
 export default function Quest() {
-  const { data, login, act, busy } = useLoop(),
+  const campaignId = useSearchParams().get('campaign') || 'astral',
+    query = campaignId === 'astral' ? '' : '?campaign=' + campaignId,
+    data = useCampaign(campaignId),
+    { login, act, busy, loadFailed } = useLoop(),
     [mode, setMode] = useState<'run' | 'lore'>('run'),
     [session, setSession] = useState<Session | null>(null),
     [result, setResult] = useState<Result | null>(null),
@@ -36,7 +32,7 @@ export default function Quest() {
     finishing = useRef(false);
   const start = async () => {
     if (!data?.user || data.user.role !== 'COLLECTOR') await login('collector');
-    const g = await act<Session>({ action: 'start', mode });
+    const g = await act<Session>({ action: 'start', mode, campaignId });
     if (g) {
       setSession(g);
       setAnswers([]);
@@ -121,94 +117,94 @@ export default function Quest() {
       if (r) setResult(r);
     }
   };
+  // The drop data failed to load: show the shared error state with a retry.
+  if (loadFailed) return <Pending />;
   const currentWave = Math.min(questConfig.waves - 1, Math.floor(tick / waveDuration)),
     w = wave(session?.seed ?? 0, currentWave),
     depth = (tick % waveDuration) / waveDuration;
   return (
-    <section className="page quest-page">
-      <div className="breadcrumb">
-        <Link href="/drop">
-          <ArrowLeft size={14} /> Astral Kin
-        </Link>
-        <span>/</span>Launch Quest
-      </div>
+    <section className="wrap quest">
       <div className="quest-heading">
-        <div>
-          <p className="eyebrow">YOUR PLACE AMONG THE STARS</p>
-          <h1>
-            The fragment run<span>.</span>
-          </h1>
-        </div>
-        <p>
-          Find your rhythm. Gather the light.
-          <br />
-          Earn your place in the first constellation.
-        </p>
+        <h1>{mode === 'run' ? 'The fragment run.' : 'The lore challenge.'}</h1>
+        <p className="lead">Win to unlock one preorder slot. Free to play, no purchase needed.</p>
+        {data && (
+          <p className="tries" role="status">
+            {data.attemptsLeft > 0
+              ? `Free to play. You have ${data.attemptsLeft} ${data.attemptsLeft === 1 ? 'try' : 'tries'} left today.`
+              : 'You have used all your tries for today.'}
+          </p>
+        )}
       </div>
       <div className="quest-layout">
-        <div className={'quest-arena ' + (mode === 'lore' ? 'lore-arena' : '')}>
-          <div className="arena-head">
-            <span>
-              <span className="live-dot" /> ASTRAL KIN / LAUNCH QUEST
-            </span>
-            <VolumeX size={17} />
-          </div>
-          {result ? (
+        <div className={'arena ' + (mode === 'lore' ? 'lore-arena' : '')}>
+          {!result && !session && data?.attemptsLeft === 0 ? (
             <div className="quest-result">
               <div className="result-symbol">
+                <Clock size={36} aria-hidden="true" />
+              </div>
+              <h2>That’s all for today.</h2>
+              <p>
+                Each collector gets {data.attemptLimit} free tries a day so bots can’t farm slots.
+                Your tries reset at midnight, Singapore time.
+              </p>
+              <Button href={'/drop' + query} variant="ghost">
+                Back to the drop
+              </Button>
+            </div>
+          ) : result ? (
+            <div className="quest-result">
+              <div className={result.won ? 'result-symbol won' : 'result-symbol'}>
                 {result.won ? <Check size={40} /> : <RotateCcw size={35} />}
               </div>
-              <p className="eyebrow">
-                {result.won ? 'YOUR CONSTELLATION IS CALLING' : 'EVERY STAR STARTS SOMEWHERE'}
-              </p>
-              <h2>{result.won ? 'Quest cleared.' : 'Another orbit?'}</h2>
+              <h2>{result.won ? 'Quest cleared.' : 'So close. Try again?'}</h2>
               <p>
                 {result.won
-                  ? 'One preorder access, earned by you.'
-                  : 'You’re getting closer. Take another free run, or try the untimed challenge.'}
+                  ? 'You unlocked one preorder slot. It is held for 15 minutes.'
+                  : `You scored ${result.score}. Playing again is free, or try the untimed lore challenge.`}
               </p>
               {result.won ? (
                 <>
                   <div className="access-ticket">
-                    <span>ASTRAL KIN / SERIES 01</span>
-                    <strong>+1 PREORDER ACCESS</strong>
-                    <small>Valid for 15 minutes · Subject to availability</small>
+                    <span>{data?.campaign.name ?? 'Astral Kin'}, series 01</span>
+                    <strong>1 preorder slot</strong>
+                    <small>Held for 15 minutes, while boxes last</small>
                   </div>
-                  <Link className="button primary" href="/checkout">
-                    Claim preorder slot <ArrowUpRight size={19} />
-                  </Link>
+                  <Button href={'/checkout' + query}>Claim preorder slot</Button>
                 </>
               ) : (
-                <button className="button primary" onClick={start}>
-                  Try again <RotateCcw size={18} />
-                </button>
+                <Button onClick={start}>
+                  Try again <RotateCcw size={18} aria-hidden="true" />
+                </Button>
               )}
             </div>
           ) : mode === 'lore' && session ? (
             <div className="lore-panel">
-              <p className="eyebrow">UNTIMED CHALLENGE · {Math.min(answers.length + 1, 3)} / 3</p>
-              <h2>{lore[answers.length]?.question || 'Checking your constellation…'}</h2>
+              <p className="lore-step">Question {Math.min(answers.length + 1, 3)} of 3</p>
+              <h2>{lore[answers.length]?.question || 'Checking your answers…'}</h2>
               <div className="lore-options">
                 {lore[answers.length]?.options.map((option, i) => (
                   <button disabled={busy} key={option} onClick={() => answer(i)}>
-                    <span>0{i + 1}</span>
+                    <span>{i + 1}</span>
                     {option}
-                    <ArrowRight size={17} />
+                    <ArrowRight size={18} aria-hidden="true" />
                   </button>
                 ))}
               </div>
-              <p className="fine">
-                Take all the time you need. Answers are in the drop’s “How it works” story.
+              <p className="note">Take your time. There is no timer on this challenge.</p>
+            </div>
+          ) : mode === 'lore' ? (
+            <div className="lore-panel">
+              <h2>Three questions. No timer.</h2>
+              <p>
+                Answer three questions about how a LoopBox drop works. No quick reflexes needed.
               </p>
+              <Button disabled={busy} onClick={start}>
+                Start lore challenge
+              </Button>
             </div>
           ) : (
             <>
               <div className="star-field" />
-              <div className="arena-horizon">
-                <i />
-                <i />
-                <i />
-              </div>
               <div className="run-track">
                 {[0, 1, 2].map((i) => (
                   <div key={i} className="track-lane" />
@@ -241,39 +237,36 @@ export default function Quest() {
               </div>
               {!running && !session ? (
                 <div className="arena-intro">
-                  <div className="quest-orbit">✧</div>
-                  <span className="eyebrow">30 SECONDS. YOUR OWN LITTLE ODYSSEY.</span>
                   <h2>Follow the light.</h2>
                   <p>
-                    Collect {questConfig.requiredScore} fragments.
-                    <br />
-                    Avoid the shadows. Find your way in.
+                    Catch {questConfig.requiredScore} of {questConfig.waves} stars in{' '}
+                    {questConfig.duration} seconds. Dodge the dark shards.
                   </p>
-                  <button className="button primary" disabled={busy} onClick={start}>
-                    Start quest <Play size={17} />
-                  </button>
+                  <Button disabled={busy} onClick={start}>
+                    Start quest <Play size={18} aria-hidden="true" />
+                  </Button>
                 </div>
               ) : countdown > 0 && running ? (
                 <div className="countdown">{countdown}</div>
               ) : paused ? (
                 <div className="arena-intro">
-                  <h2>Take a breath.</h2>
-                  <button className="button primary" onClick={() => setPaused(false)}>
-                    Resume <Play size={18} />
-                  </button>
+                  <h2>Paused.</h2>
+                  <Button onClick={() => setPaused(false)}>
+                    Resume <Play size={18} aria-hidden="true" />
+                  </Button>
                 </div>
               ) : null}
               {running && (
                 <div className="game-hud">
                   <div>
-                    <span>FRAGMENTS</span>
+                    <span>Stars</span>
                     <strong>
-                      {score.toString().padStart(2, '0')}{' '}
-                      <small>/ {questConfig.requiredScore}</small>
+                      {score.toString().padStart(2, '0')}
+                      <small>/{questConfig.requiredScore}</small>
                     </strong>
                   </div>
                   <div>
-                    <span>TIME LEFT</span>
+                    <span>Time</span>
                     <strong>
                       {Math.ceil(questConfig.duration - tick)
                         .toString()
@@ -282,86 +275,63 @@ export default function Quest() {
                     </strong>
                   </div>
                   <button
-                    className="icon-button"
+                    className="hud-pause"
                     aria-label="Pause quest"
                     onClick={() => setPaused(!paused)}
                   >
-                    <Pause size={19} />
+                    <Pause size={20} />
                   </button>
                 </div>
               )}
             </>
           )}
-          {mode === 'lore' && !session && !result && (
-            <div className="lore-panel">
-              <span className="eyebrow">SAME ACCESS. YOUR OWN PACE.</span>
-              <h2>
-                A thoughtful
-                <br />
-                kind of quest.
-              </h2>
-              <p>
-                Three questions about the LoopBox journey.
-                <br />
-                No timer. No reflexes required.
-              </p>
-              <button className="button primary" disabled={busy} onClick={start}>
-                Start lore challenge <ArrowRight size={18} />
-              </button>
-            </div>
-          )}
-          <div className="arena-footer">
-            <span>01 — THE FIRST CONSTELLATION</span>
-            <span>LOOPBOX ORIGINALS</span>
-          </div>
         </div>
-        <aside className="quest-aside">
-          <span className="eyebrow">MISSION BRIEF</span>
-          <h2>
-            A place,
-            <br />
-            earned by play.
-          </h2>
-          <p>
-            Complete either challenge to unlock one blind-box preorder. The collectible remains a
-            surprise.
-          </p>
-          <div className="mission-rules">
-            <div>
-              <span className="fragment-icon">✧</span>
-              <p>
-                Gather fragments<small>+1 each · Reach {questConfig.requiredScore}</small>
-              </p>
-            </div>
-            <div>
-              <span className="hazard-icon">◇</span>
-              <p>
-                Avoid shadows<small>−1 on contact</small>
-              </p>
-            </div>
-            <div>
-              <span>↔</span>
-              <p>
-                Find your lane<small>← → or A / D · Touch controls below</small>
-              </p>
-            </div>
-          </div>
-          <div className="mode-switch">
-            <span className="eyebrow">CHOOSE YOUR PACE</span>
+        <aside className="card quest-aside">
+          <h2 className="h3">How to win</h2>
+          <ul className="rules">
+            <li>
+              <span className="rule-icon fragment-icon" aria-hidden="true">
+                ✧
+              </span>
+              <span>
+                Catch stars <small>+1 each. Reach {questConfig.requiredScore}.</small>
+              </span>
+            </li>
+            <li>
+              <span className="rule-icon hazard-icon" aria-hidden="true">
+                ◆
+              </span>
+              <span>
+                Dodge dark shards <small>−1 if you hit one.</small>
+              </span>
+            </li>
+            <li>
+              <span className="rule-icon" aria-hidden="true">
+                ↔
+              </span>
+              <span>
+                Change lanes <small>Arrow keys, A and D, or the buttons below.</small>
+              </span>
+            </li>
+          </ul>
+          <fieldset className="mode-switch">
+            <legend>Choose a challenge</legend>
             <button
               disabled={running || busy}
               className={mode === 'run' ? 'selected' : ''}
+              aria-pressed={mode === 'run'}
               onClick={() => {
                 setMode('run');
                 setSession(null);
                 setResult(null);
               }}
             >
-              Fragment run <span>30 sec</span>
+              Fragment run <span>30 seconds</span>
             </button>
             <button
               disabled={running || busy}
               className={mode === 'lore' ? 'selected' : ''}
+              aria-pressed={mode === 'lore'}
               onClick={() => {
                 setMode('lore');
                 setSession(null);
@@ -370,10 +340,27 @@ export default function Quest() {
             >
               Untimed lore challenge <span>Accessible</span>
             </button>
-          </div>
-          <p className="fine">
-            Always free to retry. Access expires after 15 minutes and does not reserve stock.
+          </fieldset>
+          <p className="note">
+            Both challenges unlock the same slot. A slot lasts 15 minutes and does not hold a box
+            until you pay.
           </p>
+          {data?.demo && !running && !result && (
+            <Button
+              variant="quiet"
+              disabled={busy}
+              onClick={async () => {
+                if (!data.user || data.user.role !== 'COLLECTOR') await login('collector');
+                const r = await act<Result>({ action: 'demoWin', campaignId });
+                if (r) {
+                  setSession(null);
+                  setResult(r);
+                }
+              }}
+            >
+              Demo: win instantly
+            </Button>
+          )}
         </aside>
       </div>
       {running && (
@@ -383,14 +370,14 @@ export default function Quest() {
             disabled={paused}
             onClick={() => move(laneRef.current - 1)}
           >
-            <ArrowLeft /> Move left
+            <ArrowLeft aria-hidden="true" /> Left
           </button>
           <button
             aria-label="Move right"
             disabled={paused}
             onClick={() => move(laneRef.current + 1)}
           >
-            Move right <ArrowRight />
+            Right <ArrowRight aria-hidden="true" />
           </button>
         </div>
       )}

@@ -1,5 +1,7 @@
 import { defineConfig } from '@playwright/test';
 import { resolve } from 'node:path';
+// PW_CHROMIUM_PATH lets machines without Google Chrome (CI containers) use a local Chromium build.
+const chromium = process.env.PW_CHROMIUM_PATH;
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
@@ -9,7 +11,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:3100',
-    channel: 'chrome',
+    ...(chromium ? { launchOptions: { executablePath: chromium } } : { channel: 'chrome' }),
     viewport: { width: 1440, height: 1000 },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -19,6 +21,16 @@ export default defineConfig({
     url: 'http://127.0.0.1:3100',
     reuseExistingServer: false,
     timeout: 60000,
-    env: { LOOPBOX_DB: resolve('data/e2e.sqlite'), DEMO_MODE: 'true' },
+    env: {
+      LOOPBOX_DB: resolve('data/e2e.sqlite'),
+      DEMO_MODE: 'true',
+      // e2e always uses the simulated payment path, even if a developer has Stripe keys.
+      STRIPE_SECRET_KEY: '',
+      STRIPE_WEBHOOK_SECRET: '',
+      SIMULATE_PAYMENTS: 'true',
+      // The concurrency tests fire dozens of requests from one session in a second.
+      // Rate limiting has its own unit tests.
+      RATE_LIMIT_SCALE: '50',
+    },
   },
 });

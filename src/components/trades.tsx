@@ -2,62 +2,74 @@
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, ArrowUpRight, Repeat2, Check, ShieldCheck } from 'lucide-react';
-import { useLoop } from './provider';
+import { Check, Repeat2, ShieldCheck } from 'lucide-react';
+import { kinOf, useLoop } from './provider';
 import { CollectorGate } from './collection';
-import { Loading } from './shell';
+import { Pending } from './shell';
 import { KinArt } from './art';
-import { characters, phases } from '../lib/catalog';
+import { phaseIndex } from '../lib/catalog';
 import type { Match } from '../lib/types';
+import { Button, Empty, Tier } from './ui';
 export function Trades() {
   const { data, act, busy } = useLoop(),
     params = useSearchParams(),
     [selection, setSelection] = useState(''),
     [wants, setWants] = useState<string[]>([]),
     [searched, setSearched] = useState(false);
-  if (!data) return <Loading />;
+  if (!data) return <Pending />;
   if (data.user?.role !== 'COLLECTOR') return <CollectorGate />;
   const available = data.collection.filter(
     (a) => a.revealed && ['OWNED', 'TRADE_LISTED'].includes(a.status),
   );
   const selected =
     available.find((a) => a.id === (selection || params.get('allocation'))) || available[0];
-  const ch = characters.find((c) => c.id === selected?.character_id),
-    alternatives = characters.filter((c) => c.rarity === ch?.rarity && c.id !== ch?.id);
+  const ch = kinOf(data, selected?.character_id),
+    alternatives = data.characters.filter(
+      (c) => c.campaign_id === selected?.campaign_id && c.rarity === ch?.rarity && c.id !== ch?.id,
+    );
+  const tradeCampaign =
+    data.campaigns.find((c) => c.id === (selected?.campaign_id ?? 'astral')) ?? data.campaign;
   const pending = data.matches.filter((m) => m.status === 'PENDING'),
     done = data.matches.filter((m) => m.status === 'ACCEPTED');
   const closed =
-    phases.indexOf(data.campaign.phase) >= 4 || data.serverTime >= data.campaign.trade_ends_at;
+    phaseIndex(tradeCampaign.phase) >= 4 || data.serverTime >= tradeCampaign.trade_ends_at;
   return (
-    <section className="page trade-page">
-      <div className="workspace-heading">
+    <section className="wrap trades">
+      <div className="page-heading">
         <div>
-          <p className="eyebrow">A BETTER MATCH IS OUT THERE</p>
-          <h1>
-            The trade room<span>.</span>
-          </h1>
-          <p>Same rarity. A new connection. Nothing shipped twice.</p>
+          <h1>Trade room</h1>
+          <p className="lead">
+            Swap a kin for another one of the same rarity. Both collectors must agree before
+            anything changes.
+          </p>
         </div>
-        <span className="status-tag">
-          <span className="live-dot" />
-          {closed ? 'TRADING CLOSED' : 'TRADE WINDOW OPEN'}
+        <span className={closed ? 'live closed' : 'live'}>
+          {closed ? 'Trading closed' : 'Trading open'}
         </span>
       </div>
-      <div className="trade-principle">
-        <ShieldCheck size={20} />
-        <p>
-          A fair exchange, by design. Trades are reciprocal and stay within the same rarity tier.
-          Both collectors agree before ownership changes.
-        </p>
-      </div>
+      {done.length > 0 && (
+        <section className="trade-history" aria-label="Completed trades">
+          {done.map((m) => (
+            <div key={m.id} className="card success-card">
+              <Check size={24} aria-hidden="true" />
+              <p>
+                <strong>Exchange complete.</strong> You now own{' '}
+                {kinOf(data, data.user?.id === m.a_user ? m.requested : m.offered)?.name}.
+              </p>
+              <Link className="btn btn-ghost" href="/collection">
+                See my updated collection
+              </Link>
+            </div>
+          ))}
+        </section>
+      )}
       {closed ? (
-        <div className="empty">
-          <h2>The constellation is set.</h2>
-          <p>Allocations are final. Your kin are ready for the next chapter.</p>
-          <Link className="button primary" href="/collection">
-            View my collection
-          </Link>
-        </div>
+        <Empty
+          title="Trading has closed."
+          action={<Button href="/collection">View my collection</Button>}
+        >
+          Allocations are final. Your kin are going to production.
+        </Empty>
       ) : (
         <>
           {pending.map((m) => (
@@ -65,10 +77,10 @@ export function Trades() {
           ))}
           {available.length > 0 ? (
             <div className="trade-builder">
-              <div className="trade-offer">
-                <p className="eyebrow">01 / WHAT YOU HAVE</p>
+              <div className="card trade-offer">
+                <h2 className="h3">1. What you give</h2>
                 <label className="field-label" htmlFor="offered-kin">
-                  Choose your collectible
+                  Choose a kin from your collection
                 </label>
                 <select
                   id="offered-kin"
@@ -79,29 +91,23 @@ export function Trades() {
                     setSearched(false);
                   }}
                 >
-                  {available.map((a) => (
+                  {available.map((a, i) => (
                     <option key={a.id} value={a.id}>
-                      {characters.find((c) => c.id === a.character_id)?.name} · {a.id.slice(0, 6)}
+                      {kinOf(data, a.character_id)?.name}, box {i + 1}
                     </option>
                   ))}
                 </select>
-                {selected && (
-                  <>
-                    <KinArt id={selected.character_id} />
-                    <span className={'rarity ' + ch?.rarity.toLowerCase()}>{ch?.rarity}</span>
-                    <h2>{ch?.name}</h2>
-                    <p>Yours to exchange. Never lost while searching.</p>
-                  </>
+                {selected && ch && (
+                  <div className="offer-preview">
+                    <KinArt id={ch.id} name={ch.name} color={ch.color} />
+                    <Tier rarity={ch.rarity} />
+                    <p className="offer-name">{ch.name}</p>
+                  </div>
                 )}
               </div>
-              <div className="trade-wants">
-                <p className="eyebrow">02 / WHO YOU’D LOVE TO MEET</p>
-                <h2>
-                  A different kind
-                  <br />
-                  of connection.
-                </h2>
-                <p>Choose any same-tier kin you’d happily welcome.</p>
+              <div className="card trade-wants">
+                <h2 className="h3">2. What you would take</h2>
+                <p>Tick every {ch?.rarity.toLowerCase()} kin you would happily accept.</p>
                 <div className="want-options">
                   {alternatives.map((c) => (
                     <label
@@ -117,25 +123,21 @@ export function Trades() {
                           )
                         }
                       />
-                      <KinArt id={c.id} />
+                      <KinArt id={c.id} name={c.name} color={c.color} />
                       <span>
-                        <small>{c.rarity}</small>
                         <strong>{c.name}</strong>
-                      </span>
-                      <span className="choice-check">
-                        {wants.includes(c.id) && <Check size={15} />}
+                        <Tier rarity={c.rarity} />
                       </span>
                     </label>
                   ))}
                 </div>
                 {alternatives.length === 0 && (
-                  <p className="empty-tier">
-                    There’s only one secret character in this series. Keep this one of a kind
-                    connection.
+                  <p className="note">
+                    There is only one secret character in this series, so it has no trade partner.
                   </p>
                 )}
-                <button
-                  className="button primary wide"
+                <Button
+                  wide
                   disabled={busy || !selected || !wants.length}
                   onClick={async () => {
                     const r = await act<{ matched: boolean }>({
@@ -149,71 +151,52 @@ export function Trades() {
                     }
                   }}
                 >
-                  {busy ? 'Looking for your connection…' : 'Find my match'} <Repeat2 size={18} />
-                </button>
+                  {busy ? 'Looking for a match…' : 'Find my match'}
+                </Button>
                 {(searched || selected?.status === 'TRADE_LISTED') && (
                   <div className="search-state" role="status">
-                    <span className="live-dot" />
-                    <div>
-                      <strong>Your wish is in the constellation.</strong>
-                      <p>
-                        No reciprocal match yet. Your kin stays yours. Check back or update your
-                        choices.
-                      </p>
-                      <button
-                        className="text-link"
-                        disabled={busy}
-                        onClick={() => {
-                          act({ action: 'keep', allocationId: selected!.id });
-                          setSearched(false);
-                        }}
-                      >
-                        Cancel listing and keep my kin
-                      </button>
-                    </div>
+                    <strong>No match yet.</strong>
+                    <p>
+                      Your kin is listed and still yours. We match you as soon as someone wants it
+                      back.
+                    </p>
+                    <Button
+                      variant="quiet"
+                      disabled={busy}
+                      onClick={() => {
+                        act({ action: 'keep', allocationId: selected!.id });
+                        setSearched(false);
+                      }}
+                    >
+                      Stop looking and keep my kin
+                    </Button>
                   </div>
                 )}
-                <p className="fine">
-                  Trades close{' '}
-                  {new Date(data.campaign.trade_ends_at).toLocaleDateString('en-SG', {
+                <p className="note">
+                  Trading closes{' '}
+                  {new Date(tradeCampaign.trade_ends_at).toLocaleDateString('en-SG', {
                     day: 'numeric',
                     month: 'long',
                   })}
-                  . Matching doesn’t change rarity or create more units.
+                  . Swaps never change rarity or add boxes.
                 </p>
               </div>
             </div>
           ) : (
             pending.length === 0 && (
-              <div className="empty">
-                <h2>A new connection starts with a kin.</h2>
-                <Link className="button primary" href="/collection">
-                  Visit my collection <ArrowUpRight size={17} />
-                </Link>
-              </div>
+              <Empty
+                title="Nothing to trade yet."
+                action={<Button href="/collection">Open my collection</Button>}
+              >
+                Open a box first. Then you can offer it here.
+              </Empty>
             )
           )}
         </>
       )}
-      {done.length > 0 && (
-        <section className="trade-history">
-          <p className="eyebrow">CONNECTIONS MADE</p>
-          {done.map((m) => (
-            <div key={m.id}>
-              <Check size={19} />
-              <p>
-                <strong>Exchange complete.</strong> A new home for two digital kin.
-              </p>
-              <Link href="/collection">
-                See my updated collection <ArrowRight size={16} />
-              </Link>
-            </div>
-          ))}
-        </section>
-      )}
-      <p className="fine trade-demo-note">
-        Demo partner: Sarah’s seeded listing automatically consents to a reciprocal exchange. Other
-        collectors require both explicit acceptances.
+      <p className="note trade-principle">
+        <ShieldCheck size={18} aria-hidden="true" /> Demo note: Sarah is a seeded collector who
+        agrees to her swap automatically. Real collectors both have to accept.
       </p>
     </section>
   );
@@ -221,57 +204,46 @@ export function Trades() {
 function MatchCard({ match: m }: { match: Match }) {
   const { data, act, busy } = useLoop();
   const isA = data?.user?.id === m.a_user,
-    offered = characters.find((c) => c.id === (isA ? m.offered : m.requested)),
-    requested = characters.find((c) => c.id === (isA ? m.requested : m.offered));
+    offered = kinOf(data, isA ? m.offered : m.requested),
+    requested = kinOf(data, isA ? m.requested : m.offered);
   const accepted = isA ? m.a_accept : m.b_accept;
+  const partner = m.partner.replace(' (demo)', '');
   return (
-    <div className="match-card">
-      <div className="match-heading">
-        <p className="eyebrow">
-          <span className="live-dot" /> A CONNECTION, FOUND
-        </p>
-        <h2>Two kin. Two happy collectors.</h2>
-        <p>Your match with {m.partner} is ready.</p>
-      </div>
-      <div className="match-exchange">
-        <div>
-          <span>YOU OFFER</span>
-          <KinArt id={offered?.id} />
+    <section className="match" aria-labelledby={'match-' + m.id}>
+      <h2 id={'match-' + m.id}>Two kin. Two happy collectors.</h2>
+      <p className="match-sub">You matched with {m.partner}. Both boxes are held until you decide.</p>
+      <div className="match-cards">
+        <div className="card mcard">
+          <span className="mcard-label">You give</span>
+          <KinArt id={offered?.id} name={offered?.name} color={offered?.color} />
           <h3>{offered?.name}</h3>
-          <small>{offered?.rarity}</small>
+          {offered && <Tier rarity={offered.rarity} />}
         </div>
-        <div className="exchange-symbol">
-          <Repeat2 size={32} />
-          <span>
-            SAME RARITY
-            <br />
-            NEW CONNECTION
-          </span>
+        <div className="swap" aria-hidden="true">
+          <Repeat2 size={32} strokeWidth={2.6} />
         </div>
-        <div>
-          <span>YOU RECEIVE</span>
-          <KinArt id={requested?.id} />
+        <div className="card mcard">
+          <span className="mcard-label">{partner} gives</span>
+          <KinArt id={requested?.id} name={requested?.name} color={requested?.color} />
           <h3>{requested?.name}</h3>
-          <small>{requested?.rarity}</small>
+          {requested && <Tier rarity={requested.rarity} />}
         </div>
       </div>
-      <div className="button-row">
-        <button
-          className="button primary"
+      <div className="match-foot">
+        <Button
           disabled={busy || !!accepted}
           onClick={() => act({ action: 'respond', matchId: m.id, accept: true })}
         >
-          {accepted ? 'Waiting for the other collector' : 'Accept exchange'} <Check size={18} />
-        </button>
-        <button
-          className="button secondary"
+          {accepted ? 'Waiting for the other collector' : 'Accept exchange'}
+        </Button>
+        <Button
+          variant="ghost"
           disabled={busy}
           onClick={() => act({ action: 'respond', matchId: m.id, accept: false })}
         >
-          Decline match
-        </button>
+          Decline
+        </Button>
       </div>
-      <p className="fine">Both allocations are reserved while this match is pending.</p>
-    </div>
+    </section>
   );
 }

@@ -1,51 +1,58 @@
 export const characters = [
   {
     id: 'nova',
+    units: 21,
     name: 'Nova Scout',
     rarity: 'COMMON',
-    color: '#c99160',
+    color: '#FFB36B',
     description: 'The first light on an uncharted horizon.',
   },
   {
     id: 'moss',
+    units: 21,
     name: 'Moss Oracle',
     rarity: 'COMMON',
-    color: '#87a58b',
+    color: '#8FE08A',
     description: 'A quiet guardian of worlds still growing.',
   },
   {
     id: 'tide',
+    units: 21,
     name: 'Tide Keeper',
     rarity: 'COMMON',
-    color: '#80a8b8',
+    color: '#6FC8FF',
     description: 'Carrying the memory of a thousand oceans.',
   },
   {
     id: 'ember',
+    units: 21,
     name: 'Ember Cub',
     rarity: 'COMMON',
-    color: '#c7795a',
+    color: '#FF7F66',
     description: 'Small spark. Boundless spirit.',
   },
   {
     id: 'eclipse',
+    units: 7,
     name: 'Eclipse Knight',
     rarity: 'RARE',
-    color: '#d7ae70',
+    color: '#FFD84D',
     description: 'Between the last light and the first star.',
   },
   {
     id: 'aurora',
+    units: 7,
     name: 'Aurora Warden',
     rarity: 'RARE',
-    color: '#a2c6b9',
+    color: '#62E3C8',
     description: 'A keeper of light at the edge of the universe.',
   },
   {
     id: 'void',
+    units: 2,
     name: 'The Void Prince',
     rarity: 'SECRET',
-    color: '#b7b2cb',
+    color: '#C8A8FF',
     description: 'Some things are better left undiscovered.',
   },
 ] as const;
@@ -60,7 +67,24 @@ export const phases = [
   'SHIPPING',
   'COMPLETED',
 ] as const;
-export type Phase = (typeof phases)[number];
+/** Phases before a campaign goes live, and the cancelled end state. */
+export type Phase = (typeof phases)[number] | 'DRAFT' | 'IN_REVIEW' | 'CANCELLED';
+/** Position in the live lifecycle, or -1 for DRAFT, IN_REVIEW and CANCELLED. */
+export const phaseIndex = (phase: string) => (phases as readonly string[]).indexOf(phase);
+const phaseNames: Record<string, string> = {
+  DRAFT: 'Draft',
+  IN_REVIEW: 'In review',
+  CANCELLED: 'Cancelled',
+  UPCOMING: 'Upcoming',
+  ACTIVE_PREORDER: 'Preorder open',
+  PREORDER_CLOSED: 'Preorder closed',
+  TRADE_WINDOW: 'Trade window',
+  ALLOCATION_LOCKED: 'Allocation locked',
+  IN_PRODUCTION: 'In production',
+  SHIPPING: 'Shipping',
+  COMPLETED: 'Completed',
+};
+export const phaseLabel = (phase: string) => phaseNames[phase] ?? phase;
 export const questConfig = {
   title: 'The fragment run',
   duration: 30,
@@ -96,3 +120,5 @@ export const lore = [
 ];
 export const money = (cents: number) =>
   new Intl.NumberFormat('en-SG', { style: 'currency', currency: 'SGD' }).format(cents / 100);
+/** Compact Singapore-dollar label for prices, e.g. S$18.90. */
+export const sgd = (cents: number) => 'S$' + (cents / 100).toFixed(2);
