@@ -1,0 +1,25 @@
+LOOPBOX — HOW TO RUN THIS DOWNLOAD
+==================================
+
+You need Node.js 22.13 or newer (24 recommended). Get it free from https://nodejs.org
+(the LTS download is fine), install it, then:
+
+  Windows:        double-click  start-windows.cmd
+  macOS / Linux:  open a terminal in this folder and run  ./start-mac-linux.sh
+  Any system:     open a terminal in this folder and run  node start.mjs
+
+Then open  http://127.0.0.1:3000  in your browser.
+
+- It starts in demo mode: switch between the seeded accounts (Alex, Mei, Admin, ...) from
+  "Me" or the top-right chip. Payments are simulated; no card is charged.
+- Your data is saved in the "data" folder next to these files. To reset the demo to
+  93 of 100 boxes sold, stop the app (Ctrl+C) and delete the "data" folder.
+- Only this computer can open it. To let other devices on your network in, set
+  HOSTNAME=0.0.0.0 (see below).
+- To stop it, press Ctrl+C in the window (or close the window).
+
+Settings (optional): copy .env.example to a file named .env in this folder and edit it.
+For example PORT=4000 to use another port, or Stripe test keys for real test payments.
+Live Stripe keys are refused.
+
+The 90-second demo script is in DEMO.md. Everything else is in README.md.

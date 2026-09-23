@@ -26,6 +26,9 @@ const csp = [
 ].join('; ');
 
 const config: NextConfig = {
+  // Release builds (scripts/package-release.mjs) bundle a self-contained server that runs without
+  // `npm install`. Normal builds (Render, tests) keep the regular `next start` output.
+  ...(process.env.LOOPBOX_STANDALONE === 'true' ? { output: 'standalone' as const } : {}),
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
   reactStrictMode: true,

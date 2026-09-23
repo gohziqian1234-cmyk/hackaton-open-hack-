@@ -54,7 +54,18 @@ Before anyone buys, the computer shuffles all 100 boxes using a secret random nu
 
 **Demo honesty:** the seeded Astral Kin drop uses a fixed, disclosed seed so box 94 is always Eclipse Knight and the walkthrough is repeatable. The fingerprint still proves the order never changed after it was published. The verify page says the same.
 
-## Setup
+## Download and run (no install step)
+
+Every push to `main` builds a ready-to-run download, tests it in a real browser, and publishes it on the [**Releases page**](https://github.com/gohziqian1234-cmyk/hackaton-open-hack-/releases/latest).
+
+1. Install **Node.js 22.13 or newer** (24 recommended) from [nodejs.org](https://nodejs.org).
+2. Download `loopbox-<version>.zip` from the latest release and unzip it.
+3. Double-click `start-windows.cmd` (Windows), run `./start-mac-linux.sh` (macOS/Linux), or run `node start.mjs`.
+4. Open **http://127.0.0.1:3000**.
+
+It runs in demo mode with simulated payments and keeps its data in the `data` folder next to it (delete the folder to reset). `HOW-TO-RUN.txt` inside the download has the details. The release is built by `.github/workflows/release.yml`: `LOOPBOX_STANDALONE=true npm run build`, then `node scripts/package-release.mjs`, then the golden-path and marketplace browser tests against the package (`playwright.release.config.ts`).
+
+## Setup (from source)
 
 Requires **Node 24 or newer** and npm. No credentials are needed for the demo.
 

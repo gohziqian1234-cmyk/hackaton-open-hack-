@@ -1,0 +1,48 @@
+name: Release
+# Builds a ready-to-run LoopBox download, tests it in a real browser, and publishes it as a
+# GitHub Release (Releases → Latest → Assets). Runs on every push to main or the working branch.
+on:
+  push:
+    branches: [main, claude/great-ramanujan-ou59s1]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERSION: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - name: Build the self-contained server
+        run: npm run build
+        env:
+          LOOPBOX_STANDALONE: 'true'
+      - name: Package the download
+        run: node scripts/package-release.mjs
+        env:
+          RELEASE_VERSION: ${{ env.VERSION }}
+      - name: Browser tests against the packaged download
+        run: npx playwright test -c playwright.release.config.ts -g "golden path|Alex buys"
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" \
+            "release/loopbox-$VERSION.zip" "release/loopbox-$VERSION.tar.gz" \
+            --target "$GITHUB_SHA" \
+            --title "LoopBox v$VERSION" \
+            --notes-file scripts/release/NOTES.md \
+            --latest
