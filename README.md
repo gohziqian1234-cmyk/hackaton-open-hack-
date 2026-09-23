@@ -69,6 +69,19 @@ Use the top-right switcher for **Alex / Demo collector** and **Astral Studio / D
 
 For a repeatable run, stop the server and run `npm run reset:demo` (it removes only the generated `data/loopbox.sqlite` and related `-wal`/`-shm` files). Restart the app. This deletes local demo progress.
 
+## Payments (Stripe test mode)
+
+Checkout uses Stripe Checkout in **test mode only**; live keys (`sk_live_…`) are refused. A box is allocated only after a signed, de-duplicated `checkout.session.completed` webhook. The success page never allocates; it waits for the server.
+
+- **No keys (default demo):** with `DEMO_MODE=true` and `STRIPE_SECRET_KEY` empty, "Pay with card" runs a simulated payment through the same webhook handler. The page says "Simulated payment (demo)".
+- **Real test payments on your laptop:**
+  1. Put your test key in `.env.local`: `STRIPE_SECRET_KEY=sk_test_...` (server-only, never `NEXT_PUBLIC_`).
+  2. `stripe login`, then `stripe listen --forward-to 127.0.0.1:3000/api/stripe/webhook`.
+  3. Copy the `whsec_...` it prints into `.env.local` as `STRIPE_WEBHOOK_SECRET`, then restart `npm run dev`.
+  4. Pay with card `4242 4242 4242 4242`, any future expiry date, any CVC. The Stripe CLI prints `checkout.session.completed` and `[200]`.
+- **Safety rails:** Stripe needs a Checkout Session to live at least 30 minutes, so an unpaid order holds its seat for 31 minutes, then expires (Stripe's `checkout.session.expired` webhook, or lazily on the next page load). A payment that arrives after its seat was given away is refunded automatically. `MAX_CHARGE_CENTS` (default `100000`, S$1,000) caps any single charge.
+- **If the webhook can't reach you during a demo:** with `SIMULATE_PAYMENTS=true` the waiting page offers "Simulate payment (demo)" after 60 seconds.
+
 ## Deploy (single host)
 
 LoopBox stores everything in one SQLite file, so it must run on **one Node 24 server with a persistent disk**. Do not deploy it to Vercel or any serverless platform: every write would be lost.

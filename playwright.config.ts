@@ -21,6 +21,13 @@ export default defineConfig({
     url: 'http://127.0.0.1:3100',
     reuseExistingServer: false,
     timeout: 60000,
-    env: { LOOPBOX_DB: resolve('data/e2e.sqlite'), DEMO_MODE: 'true' },
+    env: {
+      LOOPBOX_DB: resolve('data/e2e.sqlite'),
+      DEMO_MODE: 'true',
+      // e2e always uses the simulated payment path, even if a developer has Stripe keys.
+      STRIPE_SECRET_KEY: '',
+      STRIPE_WEBHOOK_SECRET: '',
+      SIMULATE_PAYMENTS: 'true',
+    },
   },
 });

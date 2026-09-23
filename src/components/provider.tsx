@@ -17,9 +17,17 @@ const messages: Record<string, string> = {
   ATTEMPT_LIMIT: 'You have used all your tries for today. Come back after midnight, Singapore time.',
   BUSINESS_ONLY: 'Open the demo studio account to use this control.',
   DEMO_DISABLED: 'Demo sign-in is disabled on this installation.',
+  AGE_CONFIRMATION_REQUIRED: 'Please confirm you are 18 or older to buy a box.',
+  PAYMENTS_NOT_CONFIGURED: 'Card payments are not set up on this server yet.',
+  PAYMENT_UNAVAILABLE: 'We couldn’t reach the payment page. Your slot is still held. Try again.',
+  SPENDING_CAP: 'That order is above the safety limit for a single payment.',
+  LIVE_KEYS_REFUSED: 'This demo only accepts Stripe test keys.',
+  ALREADY_DONE: 'That payment was already processed.',
+  RATE_LIMITED: 'You’re going a little fast. Wait a moment and try again.',
+  INVALID_ACCESS: 'That slot belongs to someone else or has already been used.',
 };
-export async function api<T>(data?: unknown): Promise<T> {
-  const r = await fetch('/api/loopbox', {
+export async function api<T>(data?: unknown, url = '/api/loopbox'): Promise<T> {
+  const r = await fetch(url, {
     method: data ? 'POST' : 'GET',
     headers: data ? { 'Content-Type': 'application/json' } : undefined,
     body: data ? JSON.stringify(data) : undefined,
@@ -39,7 +47,7 @@ type Context = {
   refresh: () => Promise<void>;
   busy: boolean;
   error: string;
-  act: <T>(body: unknown) => Promise<T | undefined>;
+  act: <T>(body: unknown, url?: string) => Promise<T | undefined>;
   login: (user: 'collector' | 'business' | 'demo-0') => Promise<void>;
 };
 const Store = createContext<Context | null>(null);
@@ -67,11 +75,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('focus', onFocus);
   }, [refresh, attempt]);
   const act = useCallback(
-    async <T,>(body: unknown) => {
+    async <T,>(body: unknown, url?: string) => {
       setBusy(true);
       setError('');
       try {
-        const result = await api<T>(body);
+        const result = await api<T>(body, url);
         await refresh();
         return result;
       } catch (e) {

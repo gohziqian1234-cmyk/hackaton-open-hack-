@@ -10,6 +10,8 @@ export const actionSchema = z.discriminatedUnion('action', [
     values: z.array(z.number().int().min(0).max(2)).max(15),
   }),
   z.object({ action: z.literal('preorder'), accessId: id }),
+  z.object({ action: z.literal('checkout'), accessId: id, ageConfirmed: z.literal(true) }),
+  z.object({ action: z.literal('cancelCheckout') }),
   z.object({ action: z.literal('reveal'), allocationId: id }),
   z.object({ action: z.literal('trade'), allocationId: id, wants: z.array(id).min(1).max(6) }),
   z.object({ action: z.literal('keep'), allocationId: id }),
@@ -33,3 +35,4 @@ export const actionSchema = z.discriminatedUnion('action', [
     }),
   }),
 ]);
+export const simulateSchema = z.object({ orderId: id, kind: z.enum(['B2C', 'C2C']) });

@@ -1,21 +1,48 @@
 'use client';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Download, Repeat2 } from 'lucide-react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Check, Download, Loader, Repeat2 } from 'lucide-react';
 import { useLoop } from './provider';
 import { BoxArt, KinArt } from './art';
 import { Pending } from './shell';
 import { characters, sgd } from '../lib/catalog';
 import type { Allocation } from '../lib/types';
-import { Button, Empty, Perforation, Tier } from './ui';
+import { Button, Empty, ErrorNote, Perforation, Tier } from './ui';
 export function Checkout() {
   const { data, act, busy } = useLoop(),
     router = useRouter(),
-    [agreed, setAgreed] = useState(false);
+    params = useSearchParams(),
+    cancelled = params.get('cancelled') === '1',
+    [adult, setAdult] = useState(false),
+    released = useRef(false),
+    signedIn = !!data?.user;
+  useEffect(() => {
+    // Back from Stripe's cancel link: close the session and give the slot back while it lasts.
+    if (!cancelled || released.current || !signedIn) return;
+    released.current = true;
+    act({ action: 'cancelCheckout' });
+  }, [cancelled, signedIn, act]);
   if (!data) return <Pending />;
   const access = data.access[0],
-    c = data.campaign;
+    c = data.campaign,
+    pending = data.orders.find((o) => o.status === 'PENDING_PAYMENT');
+  const pay = async () => {
+    const result = await act<{ url?: string; simulated?: boolean; orderId: string }>({
+      action: 'checkout',
+      accessId: access.id,
+      ageConfirmed: true,
+    });
+    if (!result) return;
+    if (result.url) {
+      window.location.assign(result.url);
+      return;
+    }
+    const paid = await act({ orderId: result.orderId, kind: 'B2C' }, '/api/stripe/simulate');
+    if (paid) router.push('/checkout/success?order=' + result.orderId);
+  };
+  const until = (ms: number) =>
+    new Date(ms).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' });
   return (
     <section className="wrap checkout">
       <Link className="back-link" href="/drop">
@@ -26,19 +53,33 @@ export function Checkout() {
           <BoxArt />
         </div>
         <div className="checkout-main">
-          <h1>{access ? 'Your slot is ready.' : 'Win a slot first.'}</h1>
+          <h1>
+            {access ? 'Your slot is ready.' : pending ? 'Payment in progress.' : 'Win a slot first.'}
+          </h1>
+          {cancelled && access && (
+            <p className="notice" role="status">
+              Payment cancelled. Your slot is still held until {until(access.expires_at)}.
+            </p>
+          )}
           <p className="lead">
             {access
               ? 'Pay for one sealed Astral Kin box. You open it straight after.'
-              : 'Slots are earned by winning the free game. Play once, then come back here.'}
+              : pending
+                ? 'You started paying for a box. Finish on the payment page, or check its status.'
+                : 'Slots are earned by winning the free game. Play once, then come back here.'}
           </p>
           <div className="panel ticket" aria-label="Order summary">
             <div className="ticket-top">
               <div>
-                <span className="ticket-label">Astral Kin mystery box</span>
+                <span className="ticket-label">{c.name} mystery box</span>
                 <strong className="ticket-price">{sgd(c.price)}</strong>
               </div>
-              <span className="demo-flag ticket-flag">Simulated payment (demo)</span>
+              {data.payment.mode === 'simulated' && (
+                <span className="demo-flag ticket-flag">Simulated payment (demo)</span>
+              )}
+              {data.payment.mode === 'stripe' && (
+                <span className="demo-flag ticket-flag">Stripe test mode</span>
+              )}
             </div>
             <Perforation />
             <dl className="ticket-rows">
@@ -61,42 +102,133 @@ export function Checkout() {
               <label className="consent">
                 <input
                   type="checkbox"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
+                  required
+                  checked={adult}
+                  onChange={(e) => setAdult(e.target.checked)}
                 />
-                <span>
-                  I understand this is a blind box. I can’t choose the character, and it is made
-                  after allocations lock.
-                </span>
+                <span>I am 18 or older</span>
               </label>
-              <Button
-                wide
-                disabled={!agreed || busy}
-                onClick={async () => {
-                  const result = await act<{ allocationId: string }>({
-                    action: 'preorder',
-                    accessId: access.id,
-                  });
-                  if (result) router.push('/reveal/' + result.allocationId);
-                }}
-              >
-                {busy ? 'Confirming…' : 'Confirm demo preorder'}
+              <p className="note">
+                This is a blind box: you can’t choose the character. The odds are on the drop page,
+                and your box is made after allocations lock.
+              </p>
+              <Button wide disabled={!adult || busy || data.payment.mode === 'unavailable'} onClick={pay}>
+                {busy ? 'Opening payment…' : 'Pay with card'}
               </Button>
               <p className="note">
-                Your slot is held until{' '}
-                {new Date(access.expires_at).toLocaleTimeString('en-SG', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-                . We check that a box is still left when you confirm. No card details are needed in
-                this demo.
+                {data.payment.mode === 'stripe'
+                  ? 'You pay on Stripe’s secure page. Test card: 4242 4242 4242 4242, any future date, any CVC.'
+                  : data.payment.mode === 'simulated'
+                    ? 'Simulated payment (demo): no card details and no money. The same server step a real payment uses assigns your box.'
+                    : 'Card payments are not set up on this server yet.'}{' '}
+                Slot held until {until(access.expires_at)}.
               </p>
+            </div>
+          ) : pending ? (
+            <div className="row">
+              <Button
+                href={
+                  '/checkout/success?' +
+                  (pending.session_id ? 'session_id=' + pending.session_id : 'order=' + pending.id)
+                }
+              >
+                Check payment status
+              </Button>
+              <Button variant="ghost" disabled={busy} onClick={() => act({ action: 'cancelCheckout' })}>
+                Cancel this payment
+              </Button>
             </div>
           ) : (
             <Button href="/quest">Play to unlock</Button>
           )}
         </div>
       </div>
+    </section>
+  );
+}
+const POLL_MS = 1500,
+  POLL_LIMIT_MS = 60000;
+/** Never allocates. Waits until the server has confirmed payment, then offers the box. */
+export function CheckoutSuccess() {
+  const { data, refresh, act, busy } = useLoop(),
+    router = useRouter(),
+    params = useSearchParams(),
+    sessionId = params.get('session_id'),
+    orderId = params.get('order'),
+    [started, setStarted] = useState(() => Date.now()),
+    [timedOut, setTimedOut] = useState(false);
+  const order = data?.orders.find(
+    (o) => (orderId && o.id === orderId) || (sessionId && o.session_id === sessionId),
+  );
+  const paid = order && (order.status === 'PAID' || order.status === 'DEMO_PAID');
+  useEffect(() => {
+    if (paid || timedOut) return;
+    const timer = setInterval(() => {
+      if (Date.now() - started > POLL_LIMIT_MS) setTimedOut(true);
+      else refresh().catch(() => {});
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [paid, timedOut, started, refresh]);
+  if (!data) return <Pending />;
+  return (
+    <section className="wrap page-pad checkout-status">
+      {paid && order?.allocation_id ? (
+        <div className="status-card card">
+          <span className="status-icon ok" aria-hidden="true">
+            <Check size={30} />
+          </span>
+          <h1>Payment confirmed.</h1>
+          <p className="lead">Your box has been assigned. Open it whenever you are ready.</p>
+          <Button onClick={() => router.push('/reveal/' + order.allocation_id + '?open=1')}>
+            Open my box
+          </Button>
+        </div>
+      ) : order && (order.status === 'EXPIRED' || order.status === 'REFUNDED') ? (
+        <ErrorNote
+          heading="h1"
+          title={order.status === 'REFUNDED' ? 'Payment refunded.' : 'Payment not completed.'}
+        >
+          {order.status === 'REFUNDED'
+            ? 'The last box went before your payment arrived, so we refunded it in full.'
+            : 'This payment expired before it finished. Win a new slot to try again.'}
+        </ErrorNote>
+      ) : timedOut ? (
+        <ErrorNote
+          heading="h1"
+          title="Still waiting for the payment."
+          retryLabel="Check again"
+          onRetry={() => {
+            setTimedOut(false);
+            setStarted(Date.now());
+          }}
+        >
+          Stripe hasn’t confirmed this payment yet. Nothing is lost: your seat stays held until the
+          payment page expires.
+          {data.payment.simulate && order && order.status === 'PENDING_PAYMENT' && (
+            <>
+              {' '}
+              <Button
+                variant="quiet"
+                disabled={busy}
+                onClick={() => act({ orderId: order.id, kind: 'B2C' }, '/api/stripe/simulate')}
+              >
+                Simulate payment (demo)
+              </Button>
+            </>
+          )}
+        </ErrorNote>
+      ) : (
+        <div className="status-card card" role="status">
+          <span className="status-icon" aria-hidden="true">
+            <Loader size={30} />
+          </span>
+          <h1>Waiting for payment…</h1>
+          <p className="lead">
+            We assign your box only after the payment is confirmed. This usually takes a few
+            seconds.
+          </p>
+        </div>
+      )}
     </section>
   );
 }
@@ -107,6 +239,21 @@ export function Reveal() {
     { data, act, busy } = useLoop(),
     [allocation, setAllocation] = useState<Allocation | null>(null),
     [phase, setPhase] = useState<Phase>('sealed');
+  const search = useSearchParams(),
+    autoOpen = search.get('open') === '1',
+    autoStarted = useRef(false),
+    sealedHere = !!data?.collection.find((a) => a.id === params.id && !a.revealed);
+  useEffect(() => {
+    // Arriving from "Open my box" after payment starts the sequence straight away.
+    if (!autoOpen || autoStarted.current || !sealedHere) return;
+    autoStarted.current = true;
+    act<Allocation>({ action: 'reveal', allocationId: params.id }).then((a) => {
+      if (a) {
+        setAllocation(a);
+        setPhase('opening');
+      }
+    });
+  }, [autoOpen, sealedHere, params.id, act]);
   useEffect(() => {
     if (phase !== 'opening') return;
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;

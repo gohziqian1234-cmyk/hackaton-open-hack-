@@ -6,6 +6,14 @@ import { startOfSgtDay } from '../domain/time';
 import { winRate } from '../domain/metrics';
 import { buildPool, commitment, shuffle, verify } from '../domain/fairness';
 import { DEMO_SEED_HEX } from './seed';
+import {
+  SESSION_MINUTES,
+  createCheckoutSession,
+  expireCheckoutSession,
+  paymentMode,
+  refundPaymentIntent,
+  simulateAllowed,
+} from './stripe';
 import type {
   Allocation,
   Campaign,
@@ -15,16 +23,21 @@ import type {
   Access,
   Analytics,
   Verification,
+  OrderSummary,
 } from '../lib/types';
 
-export class DomainError extends Error {
-  constructor(
-    public code: string,
-    public status = 409,
-  ) {
-    super(code);
-  }
-}
+import { DomainError } from './errors';
+export { DomainError };
+/** Order statuses that hold a seat against capacity. */
+const ACTIVE = "('PENDING_PAYMENT','PAID','DEMO_PAID')";
+export type PaymentSession = {
+  id: string;
+  payment_status?: string | null;
+  payment_intent?: string | null;
+  client_reference_id?: string | null;
+  metadata?: Record<string, string> | null;
+};
+export type PaymentEvent = { id: string; type: string; session: PaymentSession };
 type GameSession = {
   id: string;
   user_id: string;
@@ -61,7 +74,7 @@ export class Loopbox {
   }
   campaign() {
     return this.one<Campaign>(
-      'SELECT c.*, (SELECT COUNT(*) FROM orders WHERE campaign_id=c.id) AS confirmed FROM campaigns c WHERE id=?',
+      `SELECT c.*, (SELECT COUNT(*) FROM orders WHERE campaign_id=c.id AND status IN ${ACTIVE}) AS confirmed FROM campaigns c WHERE id=?`,
       'astral',
     )!;
   }
@@ -78,7 +91,7 @@ export class Loopbox {
   }
   purchases(id: string) {
     return this.one<{ n: number }>(
-      'SELECT COUNT(*) AS n FROM orders WHERE user_id=? AND campaign_id=?',
+      `SELECT COUNT(*) AS n FROM orders WHERE user_id=? AND campaign_id=? AND status IN ${ACTIVE}`,
       id,
       'astral',
     )!.n;
@@ -224,31 +237,291 @@ export class Loopbox {
       return { won: true, score: c.required_score, accessId: this.grantAccess(id, c.id, gameId) };
     });
   }
-  preorder(id: string, accessId: string) {
-    return this.transaction(() => {
-      const c = this.eligible(id);
-      const a = this.one<Access & { user_id: string; campaign_id: string }>(
-        'SELECT * FROM access WHERE id=?',
-        accessId,
-      );
-      if (!a || a.user_id !== id || a.campaign_id !== c.id)
-        throw new DomainError('INVALID_ACCESS', 403);
-      if (a.status !== 'AVAILABLE') throw new DomainError('ACCESS_ALREADY_USED');
-      if (a.expires_at <= this.now()) throw new DomainError('ACCESS_EXPIRED');
-      const orderId = randomUUID();
-      this.run("UPDATE access SET status='REDEEMED' WHERE id=?", a.id);
-      this.run(
-        'INSERT INTO orders (id,user_id,campaign_id,access_id,amount,status,created_at) VALUES (?,?,?,?,?,?,?)',
+  audit(actorId: string | null, action: string, entity: string, entityId: string, detail = {}) {
+    this.run(
+      'INSERT INTO audit_log (id,actor_id,action,entity,entity_id,detail,created_at) VALUES (?,?,?,?,?,?,?)',
+      randomUUID(),
+      actorId,
+      action,
+      entity,
+      entityId,
+      JSON.stringify(detail),
+      this.now(),
+    );
+  }
+  /** Holds one seat: order PENDING_PAYMENT (counted by the capacity trigger), slot RESERVED. */
+  private reserve(id: string, accessId: string) {
+    const c = this.eligible(id);
+    const a = this.one<Access & { user_id: string; campaign_id: string }>(
+      'SELECT * FROM access WHERE id=?',
+      accessId,
+    );
+    if (!a || a.user_id !== id || a.campaign_id !== c.id)
+      throw new DomainError('INVALID_ACCESS', 403);
+    if (a.status !== 'AVAILABLE') throw new DomainError('ACCESS_ALREADY_USED');
+    if (a.expires_at <= this.now()) throw new DomainError('ACCESS_EXPIRED');
+    const orderId = randomUUID();
+    this.run(
+      'INSERT INTO orders (id,user_id,campaign_id,access_id,amount,status,created_at) VALUES (?,?,?,?,?,?,?)',
+      orderId,
+      id,
+      c.id,
+      a.id,
+      c.price,
+      'PENDING_PAYMENT',
+      this.now(),
+    );
+    this.run("UPDATE access SET status='RESERVED',order_id=? WHERE id=?", orderId, a.id);
+    this.run(
+      'INSERT INTO payments (id,kind,ref_id,user_id,amount_cents,status,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
+      randomUUID(),
+      'B2C',
+      orderId,
+      id,
+      c.price,
+      'OPEN',
+      this.now() + SESSION_MINUTES * 60000,
+      this.now(),
+      this.now(),
+    );
+    this.audit(id, 'order.created', 'order', orderId, { campaign: c.id, amount: c.price });
+    return { orderId, campaign: c };
+  }
+  /** Step 1 of paying: reserve in one transaction, then create the Stripe session outside it. */
+  async checkout(
+    id: string,
+    accessId: string,
+    ageConfirmed: boolean,
+    createSession: typeof createCheckoutSession = createCheckoutSession,
+  ): Promise<{ url: string; orderId: string } | { simulated: true; orderId: string }> {
+    if (ageConfirmed !== true) throw new DomainError('AGE_CONFIRMATION_REQUIRED', 400);
+    const mode = paymentMode(this.demo);
+    if (mode === 'unavailable') throw new DomainError('PAYMENTS_NOT_CONFIGURED', 503);
+    const { orderId, campaign } = this.transaction(() => {
+      this.run('UPDATE users SET age_confirmed_at=? WHERE id=?', this.now(), id);
+      return this.reserve(id, accessId);
+    });
+    if (mode === 'simulated') return { simulated: true, orderId };
+    try {
+      const session = await createSession({
+        kind: 'B2C',
         orderId,
-        id,
-        c.id,
-        a.id,
-        c.price,
-        'DEMO_PAID',
+        userId: id,
+        refKey: 'campaign_id',
+        refId: campaign.id,
+        name: campaign.name + ' mystery box',
+        unitAmountCents: campaign.price,
+        quantity: 1,
+        successPath: '/checkout/success?',
+        cancelPath: '/checkout?cancelled=1',
+      });
+      this.run(
+        "UPDATE payments SET stripe_session_id=?,expires_at=?,updated_at=? WHERE kind='B2C' AND ref_id=?",
+        session.id,
+        session.expiresAt,
+        this.now(),
+        orderId,
+      );
+      return { url: session.url, orderId };
+    } catch (e) {
+      this.transaction(() => this.release(orderId, 'session_failed'));
+      throw e instanceof DomainError ? e : new DomainError('PAYMENT_UNAVAILABLE', 502);
+    }
+  }
+  /** Gives the seat back. The slot returns to AVAILABLE only while its 15 minutes remain. */
+  private release(orderId: string, reason: string) {
+    const o = this.one<{ status: string; user_id: string; access_id: string }>(
+      'SELECT status,user_id,access_id FROM orders WHERE id=?',
+      orderId,
+    );
+    if (!o || o.status !== 'PENDING_PAYMENT') return false;
+    this.run("UPDATE orders SET status='EXPIRED' WHERE id=?", orderId);
+    this.run(
+      "UPDATE payments SET status='EXPIRED',updated_at=? WHERE kind='B2C' AND ref_id=? AND status='OPEN'",
+      this.now(),
+      orderId,
+    );
+    this.run(
+      "UPDATE access SET order_id=NULL,status=CASE WHEN expires_at>? THEN 'AVAILABLE' ELSE 'EXPIRED' END WHERE id=? AND status='RESERVED'",
+      reason === 'cancelled' || reason === 'session_failed' ? this.now() : Number.MAX_SAFE_INTEGER,
+      o.access_id,
+    );
+    this.audit(o.user_id, 'order.expired', 'order', orderId, { reason });
+    return true;
+  }
+  /** Buyer came back from Stripe's cancel link: close the session and free the seat. */
+  async cancelCheckout(id: string, expire: typeof expireCheckoutSession = expireCheckoutSession) {
+    const pending = this.one<{ id: string; session: string | null }>(
+      "SELECT o.id,p.stripe_session_id AS session FROM orders o JOIN payments p ON p.kind='B2C' AND p.ref_id=o.id WHERE o.user_id=? AND o.status='PENDING_PAYMENT' ORDER BY o.created_at DESC LIMIT 1",
+      id,
+    );
+    if (!pending) return { cancelled: false };
+    if (pending.session && paymentMode(this.demo) === 'stripe') {
+      try {
+        await expire(pending.session);
+      } catch {
+        // Already paid or already expired: let the webhook decide.
+        return { cancelled: false };
+      }
+    }
+    return { cancelled: this.transaction(() => this.release(pending.id, 'cancelled')) };
+  }
+  /** Marks a pending (or revivable) B2C order paid and allocates its box, in the caller's txn. */
+  private settleB2C(orderId: string, session: PaymentSession, simulated: boolean) {
+    const o = this.one<{ status: string; user_id: string; campaign_id: string; access_id: string }>(
+      'SELECT status,user_id,campaign_id,access_id FROM orders WHERE id=?',
+      orderId,
+    );
+    if (!o) return { outcome: 'ignored' as const };
+    if (o.status === 'PAID' || o.status === 'DEMO_PAID' || o.status === 'REFUNDED')
+      return { outcome: 'ignored' as const };
+    const refund = () => {
+      this.run("UPDATE orders SET status='REFUNDED' WHERE id=?", orderId);
+      this.run(
+        "UPDATE payments SET status='REFUNDED',payment_intent=?,updated_at=? WHERE kind='B2C' AND ref_id=?",
+        session.payment_intent ?? null,
+        this.now(),
+        orderId,
+      );
+      this.audit(null, 'order.refunded', 'order', orderId, { reason: 'no_capacity' });
+      return { outcome: 'refund' as const, paymentIntent: session.payment_intent ?? null };
+    };
+    if (o.status === 'EXPIRED') {
+      // Paid after the seat was released: take it back only if a box is still free.
+      const c = this.one<{ phase: string }>('SELECT phase FROM campaigns WHERE id=?', o.campaign_id);
+      if (c?.phase !== 'ACTIVE_PREORDER') return refund();
+      try {
+        this.run("UPDATE orders SET status='PENDING_PAYMENT' WHERE id=?", orderId);
+      } catch (e) {
+        if (e instanceof Error && e.message.includes('SOLD_OUT')) return refund();
+        throw e;
+      }
+    }
+    try {
+      this.run('SAVEPOINT allocate_unit');
+      this.run("UPDATE orders SET status='PAID' WHERE id=?", orderId);
+      const allocationId = this.allocate(orderId, o.user_id, o.campaign_id);
+      this.run('RELEASE allocate_unit');
+      this.run(
+        "UPDATE payments SET status=?,payment_intent=?,stripe_session_id=COALESCE(stripe_session_id,?),paid_at=?,updated_at=? WHERE kind='B2C' AND ref_id=?",
+        simulated ? 'SIMULATED' : 'PAID',
+        session.payment_intent ?? null,
+        session.id,
+        this.now(),
+        this.now(),
+        orderId,
+      );
+      this.run("UPDATE access SET status='REDEEMED',order_id=? WHERE id=?", orderId, o.access_id);
+      this.audit(o.user_id, 'order.paid', 'order', orderId, { simulated });
+      this.audit(o.user_id, 'allocation.created', 'allocation', allocationId, { order: orderId });
+      return { outcome: 'paid' as const, allocationId };
+    } catch (e) {
+      this.run('ROLLBACK TO allocate_unit');
+      this.run('RELEASE allocate_unit');
+      if (e instanceof DomainError && e.code === 'SOLD_OUT') return refund();
+      throw e;
+    }
+  }
+  /** Idempotent: a Stripe event id is processed at most once (webhook_events primary key). */
+  processPaymentEvent(event: PaymentEvent, simulated = false) {
+    return this.transaction(() => {
+      const inserted = this.run(
+        'INSERT OR IGNORE INTO webhook_events (id,type,received_at) VALUES (?,?,?)',
+        event.id,
+        event.type,
         this.now(),
       );
-      const allocationId = this.allocate(orderId, id, c.id);
-      return { orderId, allocationId };
+      if (Number(inserted.changes) === 0) return { outcome: 'duplicate' as const };
+      const meta = event.session.metadata ?? {};
+      const orderId = meta.order_id || event.session.client_reference_id || '';
+      let result: { outcome: string; allocationId?: string; paymentIntent?: string | null } = {
+        outcome: 'ignored',
+      };
+      if (meta.kind === 'C2C') result = this.settleMarket(event, orderId, simulated);
+      else if (event.type === 'checkout.session.completed') {
+        if (event.session.payment_status === 'paid')
+          result = this.settleB2C(orderId, event.session, simulated);
+      } else if (event.type === 'checkout.session.expired') {
+        result = { outcome: this.release(orderId, 'session_expired') ? 'expired' : 'ignored' };
+      }
+      this.run('UPDATE webhook_events SET processed_at=? WHERE id=?', this.now(), event.id);
+      return result;
+    });
+  }
+  /** Processes an event, then (after commit) refunds a payment that could not get a box. */
+  async handlePaymentEvent(
+    event: PaymentEvent,
+    refund: (paymentIntent: string) => Promise<void> = refundPaymentIntent,
+  ) {
+    const result = this.processPaymentEvent(event);
+    if (result.outcome === 'refund' && 'paymentIntent' in result && result.paymentIntent) {
+      try {
+        await refund(result.paymentIntent);
+        this.audit(null, 'refund.sent', 'order', event.session.client_reference_id ?? '', {});
+      } catch {
+        this.audit(null, 'refund.failed', 'order', event.session.client_reference_id ?? '', {});
+      }
+    }
+    return result;
+  }
+  /** C2C settlement is added by the marketplace service (M8). */
+  protected settleMarket(event: PaymentEvent, orderId: string, simulated: boolean) {
+    void event;
+    void orderId;
+    void simulated;
+    return { outcome: 'ignored' };
+  }
+  /** DEMO only: pays a pending order through the same handler Stripe's webhook uses. */
+  simulatePayment(id: string, orderId: string, kind: 'B2C' | 'C2C' = 'B2C') {
+    if (!simulateAllowed(this.demo)) throw new DomainError('NOT_FOUND', 404);
+    const payment = this.one<{ user_id: string; stripe_session_id: string | null; status: string }>(
+      'SELECT user_id,stripe_session_id,status FROM payments WHERE kind=? AND ref_id=?',
+      kind,
+      orderId,
+    );
+    if (!payment || payment.user_id !== id) throw new DomainError('NOT_FOUND', 404);
+    if (payment.status !== 'OPEN') throw new DomainError('ALREADY_DONE');
+    return this.processPaymentEvent(
+      {
+        id: 'sim_' + randomUUID(),
+        type: 'checkout.session.completed',
+        session: {
+          id: payment.stripe_session_id ?? 'sim_session_' + orderId,
+          payment_status: 'paid',
+          payment_intent: null,
+          client_reference_id: orderId,
+          metadata: { kind, order_id: orderId },
+        },
+      },
+      true,
+    );
+  }
+  /** DEMO only: the original one-step demo purchase, now a reserve plus simulated payment. */
+  preorder(id: string, accessId: string) {
+    if (!this.demo) throw new DomainError('NOT_FOUND', 404);
+    return this.transaction(() => {
+      const { orderId } = this.reserve(id, accessId);
+      const paid = this.settleB2C(
+        orderId,
+        { id: 'sim_session_' + orderId, payment_status: 'paid', payment_intent: null },
+        true,
+      );
+      if (paid.outcome !== 'paid') throw new DomainError('SOLD_OUT');
+      return { orderId, allocationId: paid.allocationId };
+    });
+  }
+  /** Lazy expiry on read: unpaid orders past their session, unused slots past 15 minutes. */
+  sweepExpired() {
+    const now = this.now();
+    const orders = this.all<{ id: string }>(
+      "SELECT o.id FROM orders o JOIN payments p ON p.kind='B2C' AND p.ref_id=o.id WHERE o.status='PENDING_PAYMENT' AND p.expires_at<=?",
+      now,
+    );
+    const slots = this.one("SELECT 1 FROM access WHERE status='AVAILABLE' AND expires_at<=? LIMIT 1", now);
+    if (!orders.length && !slots) return;
+    this.transaction(() => {
+      for (const o of orders) this.release(o.id, 'session_expired');
+      this.run("UPDATE access SET status='EXPIRED' WHERE status='AVAILABLE' AND expires_at<=?", now);
     });
   }
   /**
@@ -540,6 +813,7 @@ export class Loopbox {
     });
   }
   snapshot(user: User | null): Snapshot {
+    this.sweepExpired();
     const c = this.campaign();
     const id = user?.id ?? '';
     return {
@@ -568,6 +842,11 @@ export class Loopbox {
         id,
       ),
       waitlisted: !!this.one('SELECT user_id FROM waitlist WHERE user_id=?', id),
+      orders: this.all<OrderSummary>(
+        "SELECT o.id,o.status,o.created_at,a.id AS allocation_id,p.stripe_session_id AS session_id,p.expires_at FROM orders o LEFT JOIN allocations a ON a.order_id=o.id LEFT JOIN payments p ON p.kind='B2C' AND p.ref_id=o.id WHERE o.user_id=? ORDER BY o.created_at DESC LIMIT 10",
+        id,
+      ),
+      payment: { mode: paymentMode(this.demo), simulate: simulateAllowed(this.demo) },
       attemptLimit: this.attemptLimit(c),
       attemptsLeft: Math.max(0, this.attemptLimit(c) - this.attemptsUsed(id, c.id)),
     };
@@ -578,8 +857,12 @@ export class Loopbox {
     const c = this.campaign();
     const plays = count('SELECT COUNT(*) AS n FROM game_sessions'),
       wins = count('SELECT COUNT(*) AS n FROM game_sessions WHERE won=1');
+    const paid = this.one<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM orders WHERE campaign_id=? AND status IN ('PAID','DEMO_PAID')",
+      c.id,
+    )!.n;
     return {
-      orders: c.confirmed,
+      orders: paid,
       plays,
       wins,
       winRate: winRate(wins, plays),

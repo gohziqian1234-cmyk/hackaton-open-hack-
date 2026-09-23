@@ -63,7 +63,7 @@ test('golden path: quest, preorder, reveal, direct trade, final production', asy
   await page.getByRole('link', { name: 'Claim preorder slot' }).click();
   await page.getByRole('checkbox').check();
   await page.screenshot({ path: resolve(screenshotDir, '03-checkout.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Confirm demo preorder' }).click();
+  await page.getByRole('button', { name: 'Pay with card' }).click();
   await page.getByRole('button', { name: 'Open my box' }).click();
   await expect(page.getByRole('heading', { name: 'Eclipse Knight' })).toBeVisible();
   await expect(page.getByText(/You have a duplicate/)).toBeVisible();

@@ -1445,6 +1445,42 @@ select option {
   flex-shrink: 0;
 }
 
+.notice {
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r-md);
+  background: var(--orbit);
+  color: var(--moon);
+  font-weight: 600;
+}
+.checkout-status {
+  display: grid;
+}
+.status-card {
+  display: grid;
+  justify-items: center;
+  gap: var(--s4);
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--s7) var(--s6);
+  text-align: center;
+}
+.status-card h1 {
+  font-size: clamp(34px, 4.4vw, 56px);
+}
+.status-icon {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--orbit-2);
+  color: var(--moon);
+}
+.status-icon.ok {
+  background: var(--aurora);
+  color: var(--ink);
+}
+
 /* ==========================================================================
    Reveal (Frame 3). The only loud moment: shake, split, foil burst, name last.
    ========================================================================== */

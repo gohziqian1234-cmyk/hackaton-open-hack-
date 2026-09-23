@@ -52,6 +52,10 @@ export async function POST(request: Request) {
         return response(service.completeGame(user.id, data.sessionId, data.values));
       case 'preorder':
         return response(service.preorder(user.id, data.accessId));
+      case 'checkout':
+        return response(await service.checkout(user.id, data.accessId, data.ageConfirmed));
+      case 'cancelCheckout':
+        return response(await service.cancelCheckout(user.id));
       case 'reveal':
         return response(service.reveal(user.id, data.allocationId));
       case 'trade':

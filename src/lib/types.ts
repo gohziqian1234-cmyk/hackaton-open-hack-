@@ -60,6 +60,16 @@ export interface Snapshot {
   demo: boolean;
   attemptLimit: number;
   attemptsLeft: number;
+  orders: OrderSummary[];
+  payment: { mode: 'stripe' | 'simulated' | 'unavailable'; simulate: boolean };
+}
+export interface OrderSummary {
+  id: string;
+  status: 'PENDING_PAYMENT' | 'PAID' | 'DEMO_PAID' | 'EXPIRED' | 'REFUNDED';
+  created_at: number;
+  allocation_id: string | null;
+  session_id: string | null;
+  expires_at: number | null;
 }
 export interface Analytics {
   orders: number;

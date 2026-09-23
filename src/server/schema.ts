@@ -64,6 +64,14 @@ export const guardTriggers: [string, string][] = [
     'commitment_no_delete',
     "CREATE TRIGGER IF NOT EXISTS commitment_no_delete BEFORE DELETE ON fairness_commitments BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
   ],
+  [
+    'audit_no_update',
+    "CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
+  ],
+  [
+    'audit_no_delete',
+    "CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT,'IMMUTABLE'); END;",
+  ],
 ];
 const createGuards = (db: DatabaseSync, names: string[]) =>
   guardTriggers.filter(([name]) => names.includes(name)).forEach(([, sql]) => db.exec(sql));
@@ -136,6 +144,32 @@ CREATE TABLE IF NOT EXISTS fairness_commitments(campaign_id TEXT PRIMARY KEY REF
         console.warn('LoopBox: replacing v1 demo data with the committed-shuffle demo drop.');
         wipeAll(db);
       }
+    },
+  },
+  {
+    id: 4,
+    name: 'M5 Stripe payments, webhook dedupe and audit log',
+    up: (db) => {
+      // Rebuild orders to add a status CHECK. Same 7 columns in the same order.
+      db.exec(`
+DROP TRIGGER IF EXISTS capacity_guard;
+CREATE TABLE orders_v4(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),campaign_id TEXT NOT NULL REFERENCES campaigns(id),access_id TEXT UNIQUE REFERENCES access(id),amount INTEGER NOT NULL CHECK(amount>0),status TEXT NOT NULL DEFAULT 'DEMO_PAID' CHECK(status IN ('PENDING_PAYMENT','PAID','DEMO_PAID','EXPIRED','REFUNDED')),created_at INTEGER NOT NULL);
+INSERT INTO orders_v4 SELECT id,user_id,campaign_id,access_id,amount,status,created_at FROM orders;
+DROP TABLE orders;
+ALTER TABLE orders_v4 RENAME TO orders;
+CREATE INDEX IF NOT EXISTS orders_campaign ON orders(campaign_id,user_id);
+CREATE INDEX IF NOT EXISTS orders_status ON orders(campaign_id,status);
+CREATE TRIGGER capacity_guard BEFORE INSERT ON orders WHEN NEW.status IN ('PENDING_PAYMENT','PAID','DEMO_PAID') BEGIN SELECT CASE WHEN (SELECT COUNT(*) FROM orders WHERE campaign_id=NEW.campaign_id AND status IN ('PENDING_PAYMENT','PAID','DEMO_PAID'))>=(SELECT capacity FROM campaigns WHERE id=NEW.campaign_id) THEN RAISE(ABORT,'SOLD_OUT') END; END;
+CREATE TRIGGER capacity_guard_revive BEFORE UPDATE OF status ON orders WHEN NEW.status IN ('PENDING_PAYMENT','PAID','DEMO_PAID') AND OLD.status NOT IN ('PENDING_PAYMENT','PAID','DEMO_PAID') BEGIN SELECT CASE WHEN (SELECT COUNT(*) FROM orders WHERE campaign_id=NEW.campaign_id AND status IN ('PENDING_PAYMENT','PAID','DEMO_PAID'))>=(SELECT capacity FROM campaigns WHERE id=NEW.campaign_id) THEN RAISE(ABORT,'SOLD_OUT') END; END;
+CREATE TABLE IF NOT EXISTS payments(id TEXT PRIMARY KEY,kind TEXT NOT NULL CHECK(kind IN ('B2C','C2C')),ref_id TEXT NOT NULL,user_id TEXT NOT NULL REFERENCES users(id),stripe_session_id TEXT UNIQUE,payment_intent TEXT,amount_cents INTEGER NOT NULL CHECK(amount_cents>0),status TEXT NOT NULL CHECK(status IN ('OPEN','PAID','EXPIRED','FAILED','REFUNDED','SIMULATED')),expires_at INTEGER NOT NULL,paid_at INTEGER,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS payments_ref ON payments(kind,ref_id);
+CREATE TABLE IF NOT EXISTS webhook_events(id TEXT PRIMARY KEY,type TEXT NOT NULL,received_at INTEGER NOT NULL,processed_at INTEGER);
+CREATE TABLE IF NOT EXISTS audit_log(id TEXT PRIMARY KEY,actor_id TEXT,action TEXT NOT NULL,entity TEXT NOT NULL,entity_id TEXT NOT NULL,detail TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS audit_entity ON audit_log(entity,created_at);`);
+      addColumn(db, 'access', 'order_id', 'TEXT REFERENCES orders(id)');
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS access_order ON access(order_id)');
+      addColumn(db, 'users', 'age_confirmed_at', 'INTEGER');
+      createGuards(db, ['audit_no_update', 'audit_no_delete']);
     },
   },
 ];
