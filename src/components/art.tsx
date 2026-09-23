@@ -13,12 +13,12 @@ export function KinArt({ id = 'eclipse', className = '' }: { id?: string; classN
       <defs>
         <linearGradient id={uid + 'body'} x1="0" y1="0" x2="1" y2="1">
           <stop stopColor={ch.color} />
-          <stop offset="1" stopColor="#303c36" />
+          <stop offset="1" stopColor="#221B52" />
         </linearGradient>
         <linearGradient id={uid + 'glass'} x2=".5" y2="1">
-          <stop stopColor="#61746c" />
-          <stop offset=".5" stopColor="#1e302a" />
-          <stop offset="1" stopColor="#101b18" />
+          <stop stopColor="#2E2668" />
+          <stop offset=".5" stopColor="#221B52" />
+          <stop offset="1" stopColor="#0E0A26" />
         </linearGradient>
         <radialGradient id={uid + 'glow'}>
           <stop stopColor={ch.color} stopOpacity=".25" />
@@ -62,7 +62,7 @@ export function KinArt({ id = 'eclipse', className = '' }: { id?: string; classN
           fill="none"
         />
         <path d="M120 130h12m37 0h12" stroke={ch.color} strokeWidth="5" strokeLinecap="round" />
-        <circle cx="152" cy="201" r="12" fill="#182820" />
+        <circle cx="152" cy="201" r="12" fill="#17123A" />
         <path d="M152 193v16m-8-8h16" stroke={ch.color} strokeWidth="2" />
       </g>
       <ellipse
