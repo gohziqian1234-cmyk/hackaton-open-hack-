@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LoopBox — design reference v2 (Night Counter)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============ DESIGN TOKENS — copy these names exactly into src/app/globals.css ============ */
+:root{
+  --ink:#17123A;        /* page background: night sky, not black */
+  --orbit:#221B52;      /* raised surface */
+  --orbit-2:#2E2668;    /* hover / inset surface */
+  --moon:#EEEBFB;       /* primary text on dark + box-panel paper */
+  --moon-muted:#B7B0E0; /* secondary text — passes AA on --ink */
+  --star:#FFD84D;       /* primary action, "buy/play" energy */
+  --star-ink:#2A1F00;   /* text on --star */
+  --nebula:#FF6FB5;     /* secret tier, urgency */
+  --aurora:#62E3C8;     /* live, success, verified */
+  --danger:#FF8A7A;
+  --line:rgba(238,235,251,.16);
+  --foil-common:linear-gradient(135deg,#DAD6F2,#F7F5FF 50%,#C9C4EA);
+  --foil-rare:linear-gradient(120deg,#B8862B,#FFE9A3 35%,#E0B04E 55%,#FFF4CC 75%,#B8862B);
+  --foil-secret:conic-gradient(from 200deg,#FF6FB5,#FFD84D,#62E3C8,#8C7BFF,#FF6FB5);
+  --r-sm:10px; --r-md:18px; --r-lg:28px; --r-pill:999px;
+  --display:'Unbounded',system-ui,sans-serif;
+  --body:'Figtree',system-ui,sans-serif;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:72px;--s9:112px;
+}
+*{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--ink);color:var(--moon);font:500 17px/1.55 var(--body);-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--display);margin:0;line-height:1.05;letter-spacing:-.02em}
+h1{font-size:clamp(40px,5.6vw,76px);font-weight:800}
+h2{font-size:clamp(28px,3.6vw,46px);font-weight:600}
+h3{font-size:20px;font-weight:600;letter-spacing:0}
+p{margin:0;color:var(--moon-muted);max-width:60ch}
+a{color:inherit}
+button{font:inherit;cursor:pointer;border:0;color:inherit}
+:focus-visible{outline:3px solid var(--star);outline-offset:3px}
+
+/* ============ PRIMITIVES ============ */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:0 26px;border-radius:var(--r-pill);font-weight:700;font-size:17px;text-decoration:none;transition:transform .12s ease}
+.btn:active{transform:translateY(2px)}
+.btn-primary{background:var(--star);color:var(--star-ink);box-shadow:0 5px 0 #C9A21F}
+.btn-primary:active{box-shadow:0 2px 0 #C9A21F}
+.btn-ghost{background:transparent;border:2px solid var(--line);color:var(--moon)}
+.btn-ghost:hover{border-color:var(--moon)}
+.btn-quiet{background:none;color:var(--moon-muted);text-decoration:underline;text-underline-offset:4px;min-height:44px;padding:0 8px}
+.tier{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:var(--r-pill);font:700 13px/1.4 var(--body);color:#221B52}
+.tier.common{background:var(--foil-common)}
+.tier.rare{background:var(--foil-rare);background-size:200% 100%;animation:sheen 4s linear infinite}
+.tier.secret{background:var(--foil-secret);color:#17123A}
+@keyframes sheen{to{background-position:-200% 0}}
+.live{display:inline-flex;align-items:center;gap:8px;font-weight:700;color:var(--aurora);font-size:15px}
+.live::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--aurora);box-shadow:0 0 0 4px rgba(98,227,200,.2)}
+.wrap{max-width:1240px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+
+/* ============ REFERENCE PAGE CHROME (not part of the product) ============ */
+.ref-label{background:#0E0A26;color:var(--moon-muted);font:600 14px/1 var(--body);padding:14px clamp(20px,4vw,48px);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ref-label b{color:var(--star)}
+
+/* ============ TOKENS SHEET ============ */
+.tokens{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--s4);padding:var(--s7) 0}
+.sw{border-radius:var(--r-md);overflow:hidden;border:1px solid var(--line)}
+.sw i{display:block;height:84px}
+.sw span{display:block;padding:10px 12px;font-size:14px;background:var(--orbit)}
+.typescale{display:grid;gap:var(--s4);padding-bottom:var(--s7)}
+.row{display:flex;flex-wrap:wrap;gap:var(--s4);align-items:center;padding-bottom:var(--s7)}
+
+/* ============ HEADER ============ */
+.header{display:flex;align-items:center;gap:var(--s6);height:76px}
+.logo{display:flex;align-items:center;gap:10px;font:800 22px/1 var(--display);text-decoration:none}
+.logo svg{width:30px;height:30px}
+.nav{display:flex;gap:6px;margin-left:auto}
+.nav a{padding:10px 16px;border-radius:var(--r-pill);text-decoration:none;font-weight:600;font-size:16px;color:var(--moon-muted)}
+.nav a[aria-current]{background:var(--orbit-2);color:var(--moon)}
+.who{display:flex;align-items:center;gap:10px;padding:6px 14px 6px 6px;border-radius:var(--r-pill);background:var(--orbit);font-weight:600;font-size:15px}
+.who b{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--aurora);color:var(--ink)}
+
+/* ============ HOME HERO — the box is the hero ============ */
+.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:var(--s7);align-items:center;padding:var(--s8) 0 var(--s7)}
+.hero h1 span{display:block}
+.hero p{font-size:20px;margin:var(--s5) 0 var(--s6)}
+.hero-cta{display:flex;flex-wrap:wrap;gap:var(--s4);align-items:center}
+.boxstage{position:relative;aspect-ratio:1/1;display:grid;place-items:center}
+.boxstage::before{content:"";position:absolute;inset:8%;border-radius:50%;background:radial-gradient(circle,rgba(140,123,255,.35),transparent 65%)}
+.bigbox{position:relative;width:78%;transform:rotate(-4deg)}
+.stamp{position:absolute;right:-2%;top:6%;width:128px;height:128px;border-radius:50%;background:var(--star);color:var(--star-ink);display:grid;place-items:center;text-align:center;font:800 30px/1 var(--display);transform:rotate(10deg);box-shadow:0 6px 0 #C9A21F}
+.stamp small{display:block;font:700 13px/1.2 var(--body);margin-top:4px}
+
+.meter{display:flex;align-items:center;gap:var(--s5);padding:var(--s5) var(--s6);border-radius:var(--r-lg);background:var(--orbit);margin-bottom:var(--s8)}
+.bar{flex:1;height:14px;border-radius:var(--r-pill);background:var(--ink);overflow:hidden}
+.bar i{display:block;height:100%;width:93%;background:linear-gradient(90deg,var(--aurora),var(--star))}
+.meter strong{font:800 22px/1 var(--display)}
+
+/* How it works: a real sequence, so numbers are earned */
+.steps{display:grid;grid-template-columns:repeat(5,1fr);gap:var(--s3);padding:var(--s6) 0 var(--s8);counter-reset:s}
+.step{padding:var(--s5);border-radius:var(--r-md);background:var(--orbit);position:relative}
+.step::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--ink);font:800 18px/1 var(--display);color:var(--star);margin-bottom:var(--s4)}
+.step h3{margin-bottom:6px}
+.step p{font-size:15px}
+
+/* ============ DROP PAGE ============ */
+.drop{display:grid;grid-template-columns:1fr 380px;gap:var(--s7);padding:var(--s7) 0 var(--s8);align-items:start}
+.lineup{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:var(--s4);margin-top:var(--s5)}
+.kin{border-radius:var(--r-md);background:var(--orbit);padding:var(--s4);display:grid;gap:var(--s3);justify-items:start}
+.kin svg{width:100%;height:auto;background:var(--ink);border-radius:var(--r-sm)}
+.kin h3{font-size:17px}
+.kin .odds{font-size:14px;color:var(--moon-muted)}
+.buy{position:sticky;top:24px;border-radius:var(--r-lg);background:var(--moon);color:var(--ink);padding:var(--s6);display:grid;gap:var(--s4)}
+.buy p{color:#4A4380}
+.price{font:800 44px/1 var(--display)}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3);margin:0}
+.facts div{background:#DEDAF5;border-radius:var(--r-sm);padding:12px}
+.facts dt{font-size:13px;color:#4A4380;font-weight:600}
+.facts dd{margin:2px 0 0;font:800 20px/1.2 var(--display)}
+.perf{border:0;border-top:3px dashed #B8B1E6;margin:var(--s2) 0}
+.odds-note{font-size:14px}
+
+/* ============ REVEAL — the one loud moment ============ */
+.reveal{overflow:hidden;display:grid;justify-items:center;text-align:center;gap:var(--s4);padding:var(--s8) 0}
+.reveal-stage{position:relative;width:min(420px,86vw);aspect-ratio:1;display:grid;place-items:center}
+.burst{position:absolute;inset:0;border-radius:50%;background:var(--foil-rare);filter:blur(40px);opacity:.35}
+.halves{position:absolute;inset:0;pointer-events:none}
+.half{position:absolute;bottom:4%;width:44%;height:36%;background:var(--moon);border-radius:var(--r-md);box-shadow:inset 0 -8px 0 #C9C4EA}
+.half.l{left:0;transform:rotate(-18deg) translateX(-18%)}
+.half.r{right:0;transform:rotate(16deg) translateX(18%)}
+.reveal-stage svg.kinart{position:relative;width:78%}
+.reveal-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--s3);margin-top:var(--s4)}
+.dup{background:var(--orbit);border-radius:var(--r-pill);padding:10px 18px;font-weight:600;color:var(--moon)}
+.dup b{color:var(--star)}
+
+/* ============ TRADE MATCH ============ */
+.match{display:grid;grid-template-columns:1fr auto 1fr;gap:var(--s5);align-items:center;padding:var(--s7) 0 var(--s8)}
+.mcard{border-radius:var(--r-lg);background:var(--orbit);padding:var(--s5);display:grid;gap:var(--s3);justify-items:center;text-align:center}
+.mcard svg{width:70%}
+.swap{width:72px;height:72px;border-radius:50%;background:var(--star);color:var(--star-ink);display:grid;place-items:center;box-shadow:0 5px 0 #C9A21F}
+.match-foot{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:var(--s3);justify-content:center}
+
+/* ============ VERIFY ============ */
+.verify{display:grid;grid-template-columns:1fr 1fr;gap:var(--s6);padding:var(--s7) 0 var(--s8)}
+.hash{font:600 15px/1.5 ui-monospace,Menlo,monospace;background:var(--ink);border:1px solid var(--line);border-radius:var(--r-sm);padding:14px;word-break:break-all;color:var(--moon)}
+.ok{display:flex;gap:12px;align-items:center;padding:var(--s4) var(--s5);border-radius:var(--r-md);background:rgba(98,227,200,.14);color:var(--aurora);font-weight:700}
+
+/* ============ MOBILE FRAME ============ */
+.phone{width:390px;max-width:100%;margin:var(--s7) auto var(--s9);border-radius:44px;border:10px solid #0E0A26;overflow:hidden;background:var(--ink)}
+.phone .inner{padding:var(--s4)}
+.phone .buy{position:static;margin-top:var(--s4)}
+.tabbar{display:flex;justify-content:space-around;padding:10px 0 18px;background:var(--orbit);font-size:13px;font-weight:600;color:var(--moon-muted)}
+.tabbar span[aria-current]{color:var(--star)}
+
+@media (max-width:900px){
+  .hero,.drop,.verify{grid-template-columns:1fr}
+  .steps{grid-template-columns:1fr 1fr}
+  .nav{display:none}
+  .match{grid-template-columns:1fr}
+  .swap{margin:auto;transform:rotate(90deg)}
+  .buy{position:static}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="ref-label"><b>LoopBox design reference v2 — "Night Counter".</b> Each labelled frame below is a target for Claude Code. Tokens and class names are the contract.</div>
+
+<!-- ============ FRAME 0: TOKENS ============ -->
+<div class="ref-label">Frame 0 — Tokens, type scale, buttons, rarity foils</div>
+<section class="wrap">
+  <div class="tokens">
+    <div class="sw"><i style="background:#17123A"></i><span>--ink #17123A</span></div>
+    <div class="sw"><i style="background:#221B52"></i><span>--orbit #221B52</span></div>
+    <div class="sw"><i style="background:#EEEBFB"></i><span>--moon #EEEBFB</span></div>
+    <div class="sw"><i style="background:#FFD84D"></i><span>--star #FFD84D</span></div>
+    <div class="sw"><i style="background:#FF6FB5"></i><span>--nebula #FF6FB5</span></div>
+    <div class="sw"><i style="background:#62E3C8"></i><span>--aurora #62E3C8</span></div>
+  </div>
+  <div class="typescale">
+    <h1>Display 84 / Unbounded 800</h1>
+    <h2>Heading 46 / Unbounded 600</h2>
+    <h3>Title 20 / Unbounded 600</h3>
+    <p style="color:var(--moon)">Body 17 / Figtree 500. Minimum body size is 16px, minimum label size is 13px, because judges read this on a projector.</p>
+  </div>
+  <div class="row">
+    <button class="btn btn-primary">Play to unlock</button>
+    <button class="btn btn-ghost">Keep my kin</button>
+    <button class="btn-quiet btn">Save card</button>
+    <span class="tier common">Common</span>
+    <span class="tier rare">Rare</span>
+    <span class="tier secret">Secret</span>
+    <span class="live">Drop is live</span>
+  </div>
+</section>
+
+<!-- ============ FRAME 1: HOME ============ -->
+<div class="ref-label">Frame 1 — Home ( / ). The product box is the hero. One CTA.</div>
+<div class="wrap">
+  <header class="header">
+    <a class="logo" href="#"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 29 10v12L16 29 3 22V10z" fill="#FFD84D"/><path d="M3 10l13 7 13-7M16 17v12" stroke="#17123A" stroke-width="2.4" fill="none"/></svg>loopbox</a>
+    <nav class="nav" aria-label="Main navigation">
+      <a href="#" aria-current="page">The drop</a><a href="#">My collection</a><a href="#">Trade room</a><a href="#">Marketplace</a><a href="#">For partners</a>
+    </nav>
+    <button class="who"><b>A</b>Demo collector</button>
+  </header>
+
+  <section class="hero">
+    <div>
+      <span class="live">Astral Kin drop is live</span>
+      <h1 style="margin-top:18px"><span>A little mystery,</span><span>made to order.</span></h1>
+      <p>Win a slot in a short game, pay for one blind box, and open it right away. We only make the boxes people actually bought.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#">Explore the drop</a>
+        <a class="btn btn-quiet" href="#">How the draw stays fair</a>
+      </div>
+    </div>
+    <div class="boxstage" aria-label="Astral Kin blind box">
+      <svg class="bigbox" viewBox="0 0 400 420" aria-hidden="true">
+        <path d="M200 20 380 110v200L200 400 20 310V110z" fill="#2E2668"/>
+        <path d="M20 110 200 200v200L20 310z" fill="#EEEBFB"/>
+        <path d="M380 110 200 200v200l180-90z" fill="#C9C4EA"/>
+        <path d="M200 20 380 110 200 200 20 110z" fill="#FFD84D"/>
+        <path d="M110 65l180 90" stroke="#C9A21F" stroke-width="4" stroke-dasharray="10 8"/>
+        <text x="46" y="250" transform="skewY(26.6) translate(0,-45)" font-family="Unbounded" font-weight="800" font-size="34" fill="#17123A">Astral</text>
+        <text x="46" y="292" transform="skewY(26.6) translate(0,-45)" font-family="Unbounded" font-weight="800" font-size="34" fill="#17123A">Kin</text>
+        <text x="48" y="330" transform="skewY(26.6) translate(0,-45)" font-family="Figtree" font-weight="700" font-size="15" fill="#4A4380">Series 01 of 7 characters</text>
+        <g transform="translate(236 250) skewY(-26.6)"><circle cx="46" cy="40" r="30" fill="none" stroke="#17123A" stroke-width="4"/><text x="36" y="52" font-family="Unbounded" font-weight="800" font-size="32" fill="#17123A">?</text></g>
+      </svg>
+      <div class="stamp">93<small>of 100<br>claimed</small></div>
+    </div>
+  </section>
+
+  <div class="meter">
+    <span class="live">7 remaining</span>
+    <div class="bar" role="img" aria-label="93 of 100 claimed"><i></i></div>
+    <strong>93/100</strong>
+  </div>
+
+  <h2>How a drop works</h2>
+  <div class="steps">
+    <div class="step"><h3>Play</h3><p>Beat the fragment run or the lore challenge. Playing is free.</p></div>
+    <div class="step"><h3>Pay</h3><p>Your slot is held for 15 minutes. Pay the full box price.</p></div>
+    <div class="step"><h3>Open</h3><p>Your box is drawn from a shuffle we published before the drop.</p></div>
+    <div class="step"><h3>Trade</h3><p>Swap a duplicate for another kin of the same rarity.</p></div>
+    <div class="step"><h3>We make it</h3><p>Only confirmed boxes go to production, then we ship.</p></div>
+  </div>
+</div>
+
+<!-- ============ FRAME 2: DROP ============ -->
+<div class="ref-label">Frame 2 — Campaign ( /drop ). Lineup with published odds + a "price ticket" that feels like the box's side panel.</div>
+<section class="wrap drop">
+  <div>
+    <h2>Astral Kin™</h2>
+    <p style="margin-top:12px">Seven guardians from the edge of the map. One box holds one kin, and you can't pick which.</p>
+    <div class="lineup" id="lineup"></div>
+  </div>
+  <aside class="buy" aria-label="Buy a box">
+    <span class="tier rare" style="justify-self:start">Preorder open</span>
+    <div class="price">S$18.90</div>
+    <p>One sealed blind box, made after the preorder closes.</p>
+    <dl class="facts">
+      <div><dt>Left</dt><dd>7 of 100</dd></div>
+      <div><dt>Per person</dt><dd>2 max</dd></div>
+      <div><dt>Slot hold</dt><dd>15 min</dd></div>
+      <div><dt>Closes</dt><dd>2 days</dd></div>
+    </dl>
+    <hr class="perf">
+    <button class="btn btn-primary">Play to unlock</button>
+    <p class="odds-note">Free to play. No purchase needed to try the game. Odds are shown on every character.</p>
+  </aside>
+</section>
+
+<!-- ============ FRAME 3: REVEAL ============ -->
+<div class="ref-label">Frame 3 — Reveal ( /reveal/[id] ). The only loud moment in the product. Box splits, foil burst in the tier colour, name lands last.</div>
+<section class="wrap reveal">
+  <p style="color:var(--moon)">Box 94 of 100</p>
+  <div class="reveal-stage">
+    <div class="burst"></div>
+    <div id="revealKin"></div>
+    <div class="halves"><div class="half l"></div><div class="half r"></div></div>
+  </div>
+  <span class="tier rare">Rare</span>
+  <h1 style="font-size:clamp(36px,5vw,64px)">Eclipse Knight</h1>
+  <p>Between the last light and the first star.</p>
+  <div class="dup">You have a duplicate. <b>Swap it for another rare.</b></div>
+  <div class="reveal-actions">
+    <a class="btn btn-primary" href="#">Find a trade</a>
+    <button class="btn btn-ghost">Keep my kin</button>
+    <button class="btn btn-quiet">Save card</button>
+  </div>
+</section>
+
+<!-- ============ FRAME 4: TRADE MATCH ============ -->
+<div class="ref-label">Frame 4 — Trade room ( /trades ). Two cards face each other. Accept exchange is the only primary action.</div>
+<section class="wrap">
+  <h2 style="text-align:center;margin-top:48px">Two kin. Two happy collectors.</h2>
+  <div class="match">
+    <div class="mcard"><span style="font-weight:600">You give</span><div data-kin="eclipse"></div><h3>Eclipse Knight</h3><span class="tier rare">Rare</span></div>
+    <div class="swap" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 8h14l-4-4M20 16H6l4 4"/></svg></div>
+    <div class="mcard"><span style="font-weight:600">Sarah gives</span><div data-kin="aurora"></div><h3>Aurora Warden</h3><span class="tier rare">Rare</span></div>
+    <div class="match-foot"><button class="btn btn-primary">Accept exchange</button><button class="btn btn-ghost">Decline</button></div>
+  </div>
+</section>
+
+<!-- ============ FRAME 5: VERIFY ============ -->
+<div class="ref-label">Frame 5 — Fairness check ( /verify/astral ). Plain words first, hashes second.</div>
+<section class="wrap verify">
+  <div>
+    <h2>Check the draw yourself</h2>
+    <p style="margin:16px 0 24px">Before the drop opened we shuffled all 100 boxes and published a fingerprint of that order. Now that it's closed, we've revealed the shuffle. If the fingerprints match, nobody changed the order after you bought.</p>
+    <div class="ok">✓ Fingerprints match. The order was not changed.</div>
+  </div>
+  <div style="display:grid;gap:16px">
+    <div><h3 style="margin-bottom:8px">Published before the drop</h3><div class="hash">9f2c…e41a (SHA-256, full value in app)</div></div>
+    <div><h3 style="margin-bottom:8px">Recomputed from the revealed shuffle</h3><div class="hash">9f2c…e41a (SHA-256, full value in app)</div></div>
+    <a class="btn btn-ghost" href="#" style="justify-self:start">Download shuffle CSV</a>
+  </div>
+</section>
+
+<!-- ============ FRAME 6: MOBILE ============ -->
+<div class="ref-label">Frame 6 — Mobile 390px ( /drop ). Bottom tab bar replaces the top nav.</div>
+<div class="phone">
+  <div class="inner">
+    <span class="live">7 remaining</span>
+    <h2 style="margin:10px 0 8px">Astral Kin™</h2>
+    <p>Seven guardians. One box holds one kin.</p>
+    <div class="lineup" id="lineupMobile" style="grid-template-columns:1fr 1fr"></div>
+    <aside class="buy">
+      <div class="price">S$18.90</div>
+      <button class="btn btn-primary">Play to unlock</button>
+      <p class="odds-note">Free to play. Odds shown on each kin.</p>
+    </aside>
+  </div>
+  <nav class="tabbar" aria-label="Tabs"><span aria-current="page">Drop</span><span>Collection</span><span>Trades</span><span>Market</span><span>Me</span></nav>
+</div>
+
+<script>
+/* Kin art — same shape family as src/components/art.tsx, recoloured for the new palette */
+const kin=[
+ {id:'nova',n:'Nova Scout',r:'common',c:'#FFB36B',o:'21 of 100'},
+ {id:'moss',n:'Moss Oracle',r:'common',c:'#8FE08A',o:'21 of 100'},
+ {id:'tide',n:'Tide Keeper',r:'common',c:'#6FC8FF',o:'21 of 100'},
+ {id:'ember',n:'Ember Cub',r:'common',c:'#FF7F66',o:'21 of 100'},
+ {id:'eclipse',n:'Eclipse Knight',r:'rare',c:'#FFD84D',o:'7 of 100'},
+ {id:'aurora',n:'Aurora Warden',r:'rare',c:'#62E3C8',o:'7 of 100'},
+ {id:'void',n:'The Void Prince',r:'secret',c:'#C8A8FF',o:'2 of 100'}];
+function art(k){return `<svg class="kinart" viewBox="0 0 300 300" role="img" aria-label="${k.n} collectible">
+<ellipse cx="150" cy="276" rx="70" ry="10" fill="#000" opacity=".25"/>
+<path d="M108 226 Q98 266 122 266h20l-2-40M160 226v40h24q20 0 8-40" fill="${k.c}"/>
+<rect x="92" y="156" width="118" height="86" rx="38" fill="${k.c}"/>
+<rect x="72" y="166" width="32" height="68" rx="16" transform="rotate(12 88 200)" fill="${k.c}"/>
+<rect x="198" y="166" width="32" height="68" rx="16" transform="rotate(-12 214 200)" fill="${k.c}"/>
+<path d="M92 92 82 42l36 34M184 76l34-32-9 64" fill="${k.c}"/>
+<rect x="82" y="64" width="138" height="118" rx="48" fill="${k.c}"/>
+<rect x="97" y="88" width="108" height="70" rx="30" fill="#17123A"/>
+<path d="M121 124h12m37 0h12" stroke="#EEEBFB" stroke-width="7" stroke-linecap="round"/>
+<circle cx="151" cy="200" r="11" fill="#17123A"/>
+<ellipse cx="150" cy="58" rx="64" ry="12" fill="none" stroke="#EEEBFB" stroke-opacity=".7" stroke-width="3" transform="rotate(-14 150 58)"/></svg>`}
+function card(k){const hide=k.r==='secret';return `<article class="kin ${k.r}">${art(hide?{...k,c:'#40377F',n:'Secret kin'}:k)}<h3>${hide?'Secret kin':k.n}</h3><span class="tier ${k.r}">${k.r[0].toUpperCase()+k.r.slice(1)}</span><span class="odds">${k.o} boxes</span></article>`}
+document.getElementById('lineup').innerHTML=kin.map(card).join('');
+document.getElementById('lineupMobile').innerHTML=kin.slice(0,4).map(card).join('');
+document.getElementById('revealKin').innerHTML=art(kin[4]);
+document.querySelectorAll('[data-kin]').forEach(el=>el.innerHTML=art(kin.find(k=>k.id===el.dataset.kin)));
+</script>
+</body>
+</html>
